@@ -21,10 +21,34 @@ fn main() {
         {
             if !force_x11 && should_retry_with_x11(&first_err) {
                 eprintln!("StareDrop: Wayland startup failed, retrying with X11 backend...");
-                if let Err(second_err) = run_app(true) {
-                    eprintln!("Failed to start StareDrop app: {second_err}");
-                    print_linux_runtime_hints(&second_err.to_string());
+                if !x11_runtime_available() {
+                    eprintln!("X11 fallback unavailable: missing libxkbcommon-x11 runtime.");
+                    print_linux_runtime_hints(&first_err.to_string());
                     return;
+                }
+
+                // Retry in a fresh process to avoid backend-global initialization state.
+                let exe = match std::env::current_exe() {
+                    Ok(path) => path,
+                    Err(err) => {
+                        eprintln!("Failed to locate executable for X11 retry: {err}");
+                        print_linux_runtime_hints(&first_err.to_string());
+                        return;
+                    }
+                };
+                let status = std::process::Command::new(exe)
+                    .env("STAREDROP_FORCE_X11", "1")
+                    .status();
+                match status {
+                    Ok(exit) if exit.success() => return,
+                    Ok(exit) => {
+                        eprintln!("X11 fallback process exited with status: {exit}");
+                        print_linux_runtime_hints(&first_err.to_string());
+                    }
+                    Err(err) => {
+                        eprintln!("Failed to launch X11 fallback process: {err}");
+                        print_linux_runtime_hints(&first_err.to_string());
+                    }
                 }
                 return;
             }
@@ -47,6 +71,7 @@ fn run_app(force_x11: bool) -> Result<(), eframe::Error> {
     }
 
     let mut native_options = eframe::NativeOptions::default();
+    native_options.renderer = eframe::Renderer::Wgpu;
     #[cfg(target_os = "linux")]
     if force_x11 {
         native_options.event_loop_builder = Some(Box::new(|builder| {
@@ -72,6 +97,13 @@ fn should_retry_with_x11(err: &eframe::Error) -> bool {
 }
 
 #[cfg(target_os = "linux")]
+fn x11_runtime_available() -> bool {
+    std::path::Path::new("/usr/lib/libxkbcommon-x11.so.0").exists()
+        || std::path::Path::new("/lib/libxkbcommon-x11.so.0").exists()
+        || std::path::Path::new("/usr/lib64/libxkbcommon-x11.so.0").exists()
+}
+
+#[cfg(target_os = "linux")]
 fn print_linux_runtime_hints(error_message: &str) {
     let missing_vulkan_loader = !std::path::Path::new("/usr/lib/libvulkan.so.1").exists();
     if missing_vulkan_loader || error_message.to_lowercase().contains("libvulkan.so.1") {
@@ -82,6 +114,11 @@ fn print_linux_runtime_hints(error_message: &str) {
     if error_message.to_lowercase().contains("wayland") {
         eprintln!(
             "Hint: Force X11 fallback with: STAREDROP_FORCE_X11=1 cargo run -p staredrop-app"
+        );
+    }
+    if !x11_runtime_available() {
+        eprintln!(
+            "Hint: Missing X11 keyboard runtime. On Arch install: sudo pacman -S --needed libxkbcommon-x11"
         );
     }
 }
