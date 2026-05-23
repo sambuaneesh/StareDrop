@@ -5,7 +5,7 @@ pub mod progress;
 pub mod session;
 pub mod types;
 
-pub use error::{StareDropError, Result};
+pub use error::{Result, StareDropError};
 pub use frame::{DecodedFrame, FramePayload, RenderedFrame};
 pub use manifest::TransferManifest;
 pub use progress::{ChunkAcceptResult, TransferProgress};

@@ -15,12 +15,73 @@ fn main() {
         )
         .init();
 
-    let native_options = eframe::NativeOptions::default();
-    if let Err(err) = eframe::run_native(
+    let force_x11 = std::env::var("STAREDROP_FORCE_X11").ok().as_deref() == Some("1");
+    if let Err(first_err) = run_app(force_x11) {
+        #[cfg(target_os = "linux")]
+        {
+            if !force_x11 && should_retry_with_x11(&first_err) {
+                eprintln!("StareDrop: Wayland startup failed, retrying with X11 backend...");
+                if let Err(second_err) = run_app(true) {
+                    eprintln!("Failed to start StareDrop app: {second_err}");
+                    print_linux_runtime_hints(&second_err.to_string());
+                    return;
+                }
+                return;
+            }
+        }
+
+        eprintln!("Failed to start StareDrop app: {first_err}");
+        #[cfg(target_os = "linux")]
+        print_linux_runtime_hints(&first_err.to_string());
+    }
+}
+
+fn run_app(force_x11: bool) -> Result<(), eframe::Error> {
+    #[cfg(target_os = "linux")]
+    if force_x11 {
+        // Rust 2024: mutating process env is unsafe; this runs before GUI threads start.
+        unsafe {
+            std::env::remove_var("WAYLAND_DISPLAY");
+            std::env::remove_var("WAYLAND_SOCKET");
+        }
+    }
+
+    let mut native_options = eframe::NativeOptions::default();
+    #[cfg(target_os = "linux")]
+    if force_x11 {
+        native_options.event_loop_builder = Some(Box::new(|builder| {
+            use winit::platform::x11::EventLoopBuilderExtX11;
+            builder.with_x11();
+        }));
+    }
+
+    eframe::run_native(
         "StareDrop (Phase 0/1 MVP)",
         native_options,
         Box::new(|cc| Box::new(StareDropApp::new(cc))),
-    ) {
-        eprintln!("Failed to start StareDrop app: {err}");
+    )
+}
+
+#[cfg(target_os = "linux")]
+fn should_retry_with_x11(err: &eframe::Error) -> bool {
+    let msg = err.to_string().to_lowercase();
+    msg.contains("wayland")
+        || std::env::var("WAYLAND_DISPLAY")
+            .map(|v| !v.is_empty())
+            .unwrap_or(false)
+}
+
+#[cfg(target_os = "linux")]
+fn print_linux_runtime_hints(error_message: &str) {
+    let missing_vulkan_loader = !std::path::Path::new("/usr/lib/libvulkan.so.1").exists();
+    if missing_vulkan_loader || error_message.to_lowercase().contains("libvulkan.so.1") {
+        eprintln!(
+            "Hint: Vulkan loader is missing. On Arch install: sudo pacman -S --needed vulkan-icd-loader vulkan-dzn vulkan-swrast"
+        );
+    }
+    if error_message.to_lowercase().contains("wayland") {
+        eprintln!(
+            "Hint: Force X11 fallback with: STAREDROP_FORCE_X11=1 cargo run -p staredrop-app"
+        );
     }
 }

@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use staredrop_core::{Chunk, ChunkAcceptResult, StareDropError, Reassembler, Result, TransferProgress};
+use staredrop_core::{
+    Chunk, ChunkAcceptResult, Reassembler, Result, StareDropError, TransferProgress,
+};
 
 #[derive(Default)]
 pub struct BasicReassembler {

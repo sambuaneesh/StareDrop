@@ -13,6 +13,7 @@ image.workspace = true
 rfd.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+winit.workspace = true
 staredrop-camera = { path = "../staredrop-camera" }
 staredrop-codec-qr = { path = "../staredrop-codec-qr" }
 staredrop-core = { path = "../staredrop-core" }

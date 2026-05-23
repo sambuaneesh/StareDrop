@@ -1,4 +1,4 @@
-use staredrop_core::{Chunk, Chunker, StareDropError, Result};
+use staredrop_core::{Chunk, Chunker, Result, StareDropError};
 
 pub struct FixedSizeChunker {
     pub chunk_size: usize,
