@@ -44,6 +44,8 @@
   "frame_type": "DATA",
   "session_id": "uuid",
   "file_id": "uuid",
+  "file_name": "example.txt",
+  "file_size": 1234,
   "chunk_index": 0,
   "total_chunks": 2,
   "payload_base64": "....",

@@ -2,6 +2,7 @@ mod app;
 mod cli;
 mod receiver_page;
 mod sender_page;
+mod transfer;
 
 use app::{LaunchMode, StareDropApp};
 use clap::Parser;

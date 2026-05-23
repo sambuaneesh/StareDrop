@@ -1,6 +1,6 @@
-# StareDrop Terminal Usage (Phase 1)
+# StareDrop Terminal Usage (Phase 2)
 
-StareDrop is CLI-driven in Phase 1. The terminal selects mode and options; the desktop window is used for fullscreen QR display or camera scanning.
+StareDrop is CLI-driven. The terminal selects mode and options; the desktop window is used for fullscreen QR display or camera scanning.
 
 ## Command shape
 
@@ -21,16 +21,17 @@ cargo run -p staredrop-app -- [global-flags] <subcommand> [subcommand-flags]
 
 ## Sender flags
 
-1. `--text <TEXT>`: inline payload text.
-2. `--input-file <PATH>`: payload from file.
-3. `--input-format <utf8|base64>` (default: `utf8`):
-   - `utf8`: file bytes must be valid UTF-8.
-   - `base64`: file bytes encoded as Base64 text for QR payload.
+1. `--text <TEXT>`: inline payload text (static QR mode).
+2. `--input-file <PATH>`: static QR payload from file.
+3. `--send-file <PATH>`: Phase 2 animated file-transfer source file.
+4. `--input-format <utf8|base64>` (default: `utf8`) for `--input-file`.
+5. `--chunk-size <N>` (default: `700`) for `--send-file`.
+6. `--fps <N>` (default: `8`) for sender frame animation.
 
 Rules:
 
-1. Use exactly one of `--text` or `--input-file`.
-2. If file is binary, use `--input-format base64`.
+1. Use exactly one of `--text`, `--input-file`, or `--send-file`.
+2. If using `--input-file` with binary content, use `--input-format base64`.
 
 Examples:
 
@@ -38,27 +39,33 @@ Examples:
 cargo run -p staredrop-app -- sender --text "hello world"
 cargo run -p staredrop-app -- sender --input-file ./payload.txt --input-format utf8
 cargo run -p staredrop-app -- sender --input-file ./sample.bin --input-format base64
+cargo run -p staredrop-app -- sender --send-file ./payload.bin --chunk-size 700 --fps 8
 ```
 
 ## Receiver flags
 
 1. `--camera-index <N>` (default: `0`)
 2. `--auto-start` (default: `false`)
-3. `--print-decoded <true|false>` (default: `true`)
+3. `--print-decoded <true|false>` (default: `false`)
+4. `--output-file <PATH>`: exact output path (must not exist)
+5. `--output-dir <PATH>` (default: `.`): output directory when output-file is not set
+6. `--auto-save <true|false>` (default: `true`)
 
 Examples:
 
 ```bash
 cargo run -p staredrop-app -- list-cameras
 cargo run -p staredrop-app -- receiver --camera-index 0
-cargo run -p staredrop-app -- receiver --camera-index 1 --auto-start
+cargo run -p staredrop-app -- receiver --camera-index 1 --auto-start --output-dir ./received
+cargo run -p staredrop-app -- receiver --camera-index 1 --output-file ./received/output.bin
 ```
 
 ## Receiver keyboard controls
 
 1. `Space`: start/stop scanning
 2. `R`: refresh camera list
-3. `Q` or `Esc`: quit app
+3. `S`: manual save (useful with `--auto-save false`)
+4. `Q` or `Esc`: quit app
 
 ## Linux / WSL notes
 
@@ -82,6 +89,6 @@ export WAYLAND_DISPLAY=wayland-0
 export DISPLAY=:0
 ```
 
-## Scope in Phase 1
+## Scope in Phase 2
 
-This mode currently supports static QR text transfer only. Multi-frame file transfer starts in Phase 2.
+Phase 2 supports static text mode and animated multi-frame file transfer using JSON/Base64 frames with CRC32 and SHA-256 validation.

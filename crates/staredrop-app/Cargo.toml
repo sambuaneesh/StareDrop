@@ -8,14 +8,22 @@ rust-version.workspace = true
 [dependencies]
 anyhow.workspace = true
 base64.workspace = true
+chrono.workspace = true
 clap.workspace = true
 eframe.workspace = true
 egui.workspace = true
 image.workspace = true
 rfd.workspace = true
+uuid.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 winit.workspace = true
+staredrop-chunking = { path = "../staredrop-chunking" }
 staredrop-camera = { path = "../staredrop-camera" }
 staredrop-codec-qr = { path = "../staredrop-codec-qr" }
 staredrop-core = { path = "../staredrop-core" }
+staredrop-crypto = { path = "../staredrop-crypto" }
+staredrop-protocol = { path = "../staredrop-protocol" }
+
+[dev-dependencies]
+tempfile.workspace = true

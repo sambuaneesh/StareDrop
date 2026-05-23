@@ -2992,16 +2992,22 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64",
+ "chrono",
  "clap",
  "eframe",
  "egui",
  "image 0.25.10",
  "rfd",
  "staredrop-camera",
+ "staredrop-chunking",
  "staredrop-codec-qr",
  "staredrop-core",
+ "staredrop-crypto",
+ "staredrop-protocol",
+ "tempfile",
  "tracing",
  "tracing-subscriber",
+ "uuid",
  "winit",
 ]
 

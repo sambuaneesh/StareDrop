@@ -1,16 +1,24 @@
+use std::path::PathBuf;
+
 use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions};
 use staredrop_camera::{CameraCapture, CameraDeviceInfo, list_cameras};
 use staredrop_codec_qr::decode_first_qr_text;
+
+use crate::transfer::{OutputSpec, ReceiverSession};
 
 #[derive(Debug, Clone)]
 pub struct ReceiverConfig {
     pub camera_index: usize,
     pub auto_start: bool,
     pub print_decoded: bool,
+    pub output_file: Option<PathBuf>,
+    pub output_dir: PathBuf,
+    pub auto_save: bool,
 }
 
 pub struct ReceiverPageState {
     config: ReceiverConfig,
+    output_spec: OutputSpec,
     devices: Vec<CameraDeviceInfo>,
     capture: Option<CameraCapture>,
     scanning: bool,
@@ -20,12 +28,20 @@ pub struct ReceiverPageState {
     frames_seen: u64,
     decode_hits: u64,
     printed_last: String,
+    transfer: ReceiverSession,
 }
 
 impl ReceiverPageState {
     pub fn new(config: ReceiverConfig) -> Self {
+        let output_spec = if let Some(file) = config.output_file.clone() {
+            OutputSpec::ExactFile(file)
+        } else {
+            OutputSpec::Directory(config.output_dir.clone())
+        };
+
         let mut state = Self {
             config,
+            output_spec,
             devices: Vec::new(),
             capture: None,
             scanning: false,
@@ -35,6 +51,7 @@ impl ReceiverPageState {
             frames_seen: 0,
             decode_hits: 0,
             printed_last: String::new(),
+            transfer: ReceiverSession::new(),
         };
         state.refresh_devices();
         if state.config.auto_start {
@@ -87,13 +104,28 @@ impl ReceiverPageState {
                             ui.label(format!("Camera index: {}", self.config.camera_index));
                             ui.label(format!("Frames captured: {}", self.frames_seen));
                             ui.label(format!("Frames decoded: {}", self.decode_hits));
+                            let progress = self.transfer.progress();
+                            if progress.total_chunks > 0 {
+                                ui.label(format!(
+                                    "Transfer: {}/{} chunks (dup {}, invalid {})",
+                                    progress.received_chunks,
+                                    progress.total_chunks,
+                                    progress.duplicate_chunks,
+                                    progress.invalid_chunks
+                                ));
+                            }
                             ui.label(format!("Status: {}", self.status));
+                            if let Some(path) = &self.transfer.completed_path {
+                                ui.label(format!("Saved: {}", path.display()));
+                            }
                             if !self.decoded_text.is_empty() {
                                 ui.separator();
                                 ui.label(format!("Last decoded: {}", self.decoded_text));
                             }
                             ui.separator();
-                            ui.label("Controls: Space start/stop, R refresh cameras, Q/Esc quit");
+                            ui.label(
+                                "Controls: Space start/stop, R refresh cameras, S save, Q/Esc quit",
+                            );
                         });
                 });
         }
@@ -113,6 +145,18 @@ impl ReceiverPageState {
         if refresh {
             self.refresh_devices();
             self.status = "Camera list refreshed.".to_string();
+        }
+
+        let save = ctx.input(|i| i.key_pressed(egui::Key::S));
+        if save {
+            match self.transfer.try_finalize(&self.output_spec) {
+                Ok(path) => {
+                    self.status = format!("Saved {}", path.display());
+                }
+                Err(err) => {
+                    self.status = format!("Save failed: {err}");
+                }
+            }
         }
     }
 
@@ -194,6 +238,22 @@ impl ReceiverPageState {
                     if self.config.print_decoded && self.decoded_text != self.printed_last {
                         println!("{}", self.decoded_text);
                         self.printed_last = self.decoded_text.clone();
+                    }
+
+                    match self.transfer.on_decoded_text(
+                        &self.decoded_text,
+                        &self.output_spec,
+                        self.config.auto_save,
+                    ) {
+                        Ok(Some(path)) => {
+                            self.status = format!("Transfer complete: {}", path.display());
+                        }
+                        Ok(None) => {
+                            self.status = self.transfer.status.clone();
+                        }
+                        Err(err) => {
+                            self.status = format!("Frame rejected: {err}");
+                        }
                     }
                 }
             }

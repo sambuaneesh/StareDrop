@@ -1,10 +1,14 @@
+use std::time::{Duration, Instant};
+
 use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions};
 use staredrop_codec_qr::{encode_text_to_qr_luma, render_luma_to_rgba};
 
+use crate::transfer::SenderPlan;
+
 #[derive(Debug, Clone)]
 pub struct SenderConfig {
-    pub payload_text: String,
-    pub source_label: String,
+    pub plan: SenderPlan,
+    pub fps: f32,
 }
 
 pub struct SenderPageState {
@@ -12,6 +16,9 @@ pub struct SenderPageState {
     qr_texture: Option<TextureHandle>,
     status: String,
     qr_pixels: [usize; 2],
+    current_frame_index: usize,
+    loop_count: u64,
+    last_switch_at: Instant,
 }
 
 impl SenderPageState {
@@ -21,18 +28,30 @@ impl SenderPageState {
             qr_texture: None,
             status: String::new(),
             qr_pixels: [0, 0],
+            current_frame_index: 0,
+            loop_count: 0,
+            last_switch_at: Instant::now(),
         };
-        state.regenerate_qr(&cc.egui_ctx);
+        state.render_current_frame(&cc.egui_ctx);
         state
     }
 
-    fn regenerate_qr(&mut self, ctx: &egui::Context) {
-        if self.config.payload_text.trim().is_empty() {
-            self.status = "Empty payload. Pass --text or --input-file.".to_string();
-            return;
+    fn frame_count(&self) -> usize {
+        match &self.config.plan {
+            SenderPlan::Text { .. } => 1,
+            SenderPlan::File { frames, .. } => frames.len().max(1),
         }
+    }
 
-        match encode_text_to_qr_luma(&self.config.payload_text) {
+    fn current_frame_text(&self) -> &str {
+        match &self.config.plan {
+            SenderPlan::Text { frame_text } => frame_text,
+            SenderPlan::File { frames, .. } => &frames[self.current_frame_index],
+        }
+    }
+
+    fn render_current_frame(&mut self, ctx: &egui::Context) {
+        match encode_text_to_qr_luma(self.current_frame_text()) {
             Ok(luma) => {
                 let rgba = render_luma_to_rgba(&luma);
                 let image = ColorImage::from_rgba_unmultiplied(
@@ -42,15 +61,39 @@ impl SenderPageState {
                 self.qr_pixels = [luma.width() as usize, luma.height() as usize];
                 self.qr_texture =
                     Some(ctx.load_texture("sender_qr_texture", image, TextureOptions::NEAREST));
-                self.status = "Displaying QR payload".to_string();
+                self.status = "Displaying frame".to_string();
             }
             Err(err) => {
-                self.status = format!("Failed to encode QR: {err}");
+                self.status = format!("Failed to encode QR frame: {err}");
             }
         }
     }
 
-    pub fn ui_fullscreen(&mut self, ui: &mut egui::Ui, _ctx: &egui::Context, show_overlay: bool) {
+    fn tick_animation(&mut self, ctx: &egui::Context) {
+        if self.frame_count() <= 1 {
+            return;
+        }
+
+        let fps = self.config.fps.max(0.5);
+        let frame_dur = Duration::from_secs_f32(1.0 / fps);
+        if self.last_switch_at.elapsed() < frame_dur {
+            return;
+        }
+
+        self.current_frame_index += 1;
+        if self.current_frame_index >= self.frame_count() {
+            self.current_frame_index = 0;
+            self.loop_count += 1;
+        }
+        self.last_switch_at = Instant::now();
+        self.render_current_frame(ctx);
+    }
+
+    pub fn ui_fullscreen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, show_overlay: bool) {
+        self.tick_animation(ctx);
+        let fps = self.config.fps.max(0.5);
+        ctx.request_repaint_after(Duration::from_secs_f32(1.0 / fps));
+
         let rect = ui.max_rect();
         ui.painter().rect_filled(rect, 0.0, egui::Color32::BLACK);
 
@@ -82,8 +125,24 @@ impl SenderPageState {
                                     .color(egui::Color32::LIGHT_GREEN)
                                     .strong(),
                             );
-                            ui.label(format!("Source: {}", self.config.source_label));
-                            ui.label(format!("Payload bytes: {}", self.config.payload_text.len()));
+                            match &self.config.plan {
+                                SenderPlan::Text { frame_text } => {
+                                    ui.label("Mode: Text");
+                                    ui.label(format!("Payload bytes: {}", frame_text.len()));
+                                }
+                                SenderPlan::File { manifest, frames } => {
+                                    ui.label("Mode: File transfer");
+                                    ui.label(format!("File: {}", manifest.file_name));
+                                    ui.label(format!(
+                                        "Progress frame: {}/{}",
+                                        self.current_frame_index + 1,
+                                        frames.len()
+                                    ));
+                                    ui.label(format!("Loop count: {}", self.loop_count));
+                                    ui.label(format!("Chunk count: {}", manifest.total_chunks));
+                                }
+                            }
+                            ui.label(format!("FPS: {:.2}", self.config.fps));
                             ui.label(format!(
                                 "QR pixels: {} x {}",
                                 self.qr_pixels[0], self.qr_pixels[1]

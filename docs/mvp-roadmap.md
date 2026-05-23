@@ -2,9 +2,10 @@
 
 ## Current phase status
 
-- Phase 0: **In progress (mostly complete)**
-- Phase 1: **In progress (functional static QR path implemented)**
-- Phase 2+: **Not started**
+- Phase 0: **Completed**
+- Phase 1: **Completed**
+- Phase 2: **In progress (animated QR file transfer MVP implemented)**
+- Phase 3+: **Not started**
 
 ## Phase 0 checklist
 
@@ -32,7 +33,8 @@
 
 Next milestone is small file transfer over animated QR:
 
-1. manifest/data JSON frames
-2. chunking + reassembly in app flow
-3. repeated frame animation
-4. integrity verification and save dialog
+1. [x] manifest/data JSON frames
+2. [x] chunking + reassembly in app flow
+3. [x] repeated frame animation
+4. [x] integrity verification and output save flow
+5. [ ] manual two-device reliability validation matrix

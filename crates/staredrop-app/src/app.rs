@@ -29,7 +29,8 @@ impl StareDropApp {
     }
 
     fn handle_global_shortcuts(&mut self, ctx: &egui::Context) {
-        let wants_quit = ctx.input(|i| i.key_pressed(egui::Key::Escape) || i.key_pressed(egui::Key::Q));
+        let wants_quit =
+            ctx.input(|i| i.key_pressed(egui::Key::Escape) || i.key_pressed(egui::Key::Q));
         if wants_quit {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
@@ -44,7 +45,9 @@ impl eframe::App for StareDropApp {
             .frame(egui::Frame::none())
             .show(ctx, |ui| match &mut self.mode {
                 RuntimeMode::Sender(sender) => sender.ui_fullscreen(ui, ctx, self.show_overlay),
-                RuntimeMode::Receiver(receiver) => receiver.ui_fullscreen(ui, ctx, self.show_overlay),
+                RuntimeMode::Receiver(receiver) => {
+                    receiver.ui_fullscreen(ui, ctx, self.show_overlay)
+                }
             });
     }
 
