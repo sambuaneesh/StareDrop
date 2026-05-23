@@ -1,0 +1,4 @@
+0ec66bbe4fe606117fd693c6a2a8d3e0dd71e539d92a97b71f9ba0341175ec71  manual-tests/phase2/sample-100kb.bin
+ffb33aeb7bcc92455d347d75b55503d593accfaedfa10a55773898ca1885aab9  manual-tests/phase2/sample-10kb.bin
+df0aa68d4f85c033cf3d731f53e0593911d81c7d3e49107471057436fd3812b7  manual-tests/phase2/sample-1kb.bin
+f29869f1661db60327ab052d5c8525299bac0fa0eccd2b412768e35fa5189542  manual-tests/phase2/sample.txt
