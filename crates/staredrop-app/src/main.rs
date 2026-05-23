@@ -1,11 +1,11 @@
 mod app;
-mod benchmark_page;
+mod cli;
 mod receiver_page;
 mod sender_page;
-mod settings;
-mod ui_components;
 
-use app::StareDropApp;
+use app::{LaunchMode, StareDropApp};
+use clap::Parser;
+use cli::{Cli, Command};
 
 fn main() {
     tracing_subscriber::fmt()
@@ -15,8 +15,24 @@ fn main() {
         )
         .init();
 
+    let cli = Cli::parse();
+    if matches!(&cli.command, Command::ListCameras) {
+        if let Err(err) = cli::list_cameras_cli() {
+            eprintln!("Failed to list cameras: {err}");
+        }
+        return;
+    }
+
+    let launch_mode = match cli::resolve_launch_mode(cli.command) {
+        Ok(mode) => mode,
+        Err(err) => {
+            eprintln!("Invalid arguments: {err}");
+            return;
+        }
+    };
+
     let force_x11 = std::env::var("STAREDROP_FORCE_X11").ok().as_deref() == Some("1");
-    if let Err(first_err) = run_app(force_x11) {
+    if let Err(first_err) = run_app(force_x11, launch_mode.clone(), cli.fullscreen, cli.overlay) {
         #[cfg(target_os = "linux")]
         {
             if !force_x11 && should_retry_with_x11(&first_err) {
@@ -38,6 +54,7 @@ fn main() {
                 };
                 let status = std::process::Command::new(exe)
                     .env("STAREDROP_FORCE_X11", "1")
+                    .args(std::env::args().skip(1))
                     .status();
                 match status {
                     Ok(exit) if exit.success() => return,
@@ -60,7 +77,12 @@ fn main() {
     }
 }
 
-fn run_app(force_x11: bool) -> Result<(), eframe::Error> {
+fn run_app(
+    force_x11: bool,
+    launch_mode: LaunchMode,
+    fullscreen: bool,
+    show_overlay: bool,
+) -> Result<(), eframe::Error> {
     #[cfg(target_os = "linux")]
     if force_x11 {
         // Rust 2024: mutating process env is unsafe; this runs before GUI threads start.
@@ -72,6 +94,12 @@ fn run_app(force_x11: bool) -> Result<(), eframe::Error> {
 
     let mut native_options = eframe::NativeOptions::default();
     native_options.renderer = eframe::Renderer::Wgpu;
+    native_options.viewport = eframe::egui::ViewportBuilder::default()
+        .with_title("StareDrop")
+        .with_fullscreen(fullscreen)
+        .with_resizable(!fullscreen)
+        .with_decorations(!fullscreen);
+
     #[cfg(target_os = "linux")]
     if force_x11 {
         native_options.event_loop_builder = Some(Box::new(|builder| {
@@ -81,9 +109,9 @@ fn run_app(force_x11: bool) -> Result<(), eframe::Error> {
     }
 
     eframe::run_native(
-        "StareDrop (Phase 0/1 MVP)",
+        "StareDrop",
         native_options,
-        Box::new(|cc| Box::new(StareDropApp::new(cc))),
+        Box::new(move |cc| Box::new(StareDropApp::new(cc, launch_mode, show_overlay))),
     )
 }
 
@@ -105,15 +133,9 @@ fn x11_runtime_available() -> bool {
 
 #[cfg(target_os = "linux")]
 fn print_linux_runtime_hints(error_message: &str) {
-    let missing_vulkan_loader = !std::path::Path::new("/usr/lib/libvulkan.so.1").exists();
-    if missing_vulkan_loader || error_message.to_lowercase().contains("libvulkan.so.1") {
-        eprintln!(
-            "Hint: Vulkan loader is missing. On Arch install: sudo pacman -S --needed vulkan-icd-loader vulkan-dzn vulkan-swrast"
-        );
-    }
     if error_message.to_lowercase().contains("wayland") {
         eprintln!(
-            "Hint: Force X11 fallback with: STAREDROP_FORCE_X11=1 cargo run -p staredrop-app"
+            "Hint: Force X11 fallback with: STAREDROP_FORCE_X11=1 cargo run -p staredrop-app -- <args>"
         );
     }
     if !x11_runtime_available() {

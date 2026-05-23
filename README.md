@@ -33,9 +33,9 @@ flowchart TD
 Implemented:
 
 - Cargo workspace with modular crates
-- `eframe/egui` desktop app skeleton
-- Static QR text sender
-- Camera QR receiver (decode loop)
+- CLI-first desktop runtime (`sender`, `receiver`, `list-cameras`)
+- Fullscreen static QR sender (terminal-configured)
+- Fullscreen camera QR receiver (terminal-configured)
 - Core protocol/session/chunking utilities and tests
 - Research and protocol docs scaffold
 
@@ -59,8 +59,44 @@ See root [Cargo.toml](Cargo.toml) and:
 
 ## Run
 
+List camera devices:
+
 ```bash
-cargo run -p staredrop-app
+cargo run -p staredrop-app -- list-cameras
+```
+
+Sender mode (inline payload):
+
+```bash
+cargo run -p staredrop-app -- sender --text "hello world"
+```
+
+Sender mode (payload from file):
+
+```bash
+cargo run -p staredrop-app -- sender --input-file ./payload.txt --input-format utf8
+```
+
+Sender mode (raw bytes as Base64 text in QR):
+
+```bash
+cargo run -p staredrop-app -- sender --input-file ./sample.bin --input-format base64
+```
+
+Receiver mode:
+
+```bash
+cargo run -p staredrop-app -- receiver --camera-index 0 --auto-start
+```
+
+Window options:
+
+```bash
+# disable fullscreen
+cargo run -p staredrop-app -- --fullscreen false sender --text "hello"
+
+# hide overlay text
+cargo run -p staredrop-app -- --overlay false receiver --camera-index 0
 ```
 
 ## Test
@@ -69,21 +105,28 @@ cargo run -p staredrop-app
 cargo test --workspace
 ```
 
-## First manual flow
+## First manual flow (Phase 1)
 
-1. Open app on sender.
-2. Sender tab: enter `hello world`.
-3. QR is rendered.
-4. Open app on receiver.
-5. Receiver tab: pick camera, click `Start Scanning`.
-6. Point receiver camera at sender screen.
-7. Decoded text appears on receiver.
+1. Run `list-cameras` and note receiver camera index.
+2. Start sender using `sender --text "..."`
+3. Start receiver using `receiver --camera-index N`
+4. Receiver controls:
+   - `Space`: start/stop scanning
+   - `R`: refresh camera list
+   - `Q` or `Esc`: quit
+5. Point receiver camera at sender fullscreen QR.
+6. Decoded text appears in receiver overlay and prints to terminal by default.
 
 ## Known limitations (Phase 1)
 
 - Camera backend depends on OS camera permissions and backend support.
 - Decode reliability depends on focus, distance, brightness, and refresh rate.
+- Phase 1 transfers text payload only (no multi-frame file transfer yet).
 - No frame replay/missing-chunk handling yet.
+
+## Terminal Usage Reference
+
+See [docs/terminal-usage.md](docs/terminal-usage.md).
 
 ## Roadmap
 

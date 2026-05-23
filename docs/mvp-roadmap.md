@@ -18,13 +18,14 @@
 
 ## Phase 1 checklist
 
-- [x] Sender text input UI
+- [x] Terminal-driven sender mode
 - [x] QR encoding (`qrcode`)
-- [x] QR render in GUI
-- [x] Receiver camera selection
-- [x] Camera capture loop (`nokhwa`)
+- [x] Fullscreen QR display surface
+- [x] Terminal-driven receiver mode
+- [x] Camera capture loop (`rscam`)
 - [x] QR decode loop (`rqrr`)
-- [x] Display decoded text
+- [x] Fullscreen camera scan surface
+- [x] Decoded text in overlay + terminal output
 - [x] Basic logging setup
 
 ## Phase 2 preview

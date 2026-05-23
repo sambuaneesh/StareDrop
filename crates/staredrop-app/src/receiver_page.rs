@@ -2,9 +2,16 @@ use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions};
 use staredrop_camera::{CameraCapture, CameraDeviceInfo, list_cameras};
 use staredrop_codec_qr::decode_first_qr_text;
 
+#[derive(Debug, Clone)]
+pub struct ReceiverConfig {
+    pub camera_index: usize,
+    pub auto_start: bool,
+    pub print_decoded: bool,
+}
+
 pub struct ReceiverPageState {
+    config: ReceiverConfig,
     devices: Vec<CameraDeviceInfo>,
-    selected_index: usize,
     capture: Option<CameraCapture>,
     scanning: bool,
     preview_texture: Option<TextureHandle>,
@@ -12,13 +19,14 @@ pub struct ReceiverPageState {
     status: String,
     frames_seen: u64,
     decode_hits: u64,
+    printed_last: String,
 }
 
 impl ReceiverPageState {
-    pub fn new() -> Self {
+    pub fn new(config: ReceiverConfig) -> Self {
         let mut state = Self {
+            config,
             devices: Vec::new(),
-            selected_index: 0,
             capture: None,
             scanning: false,
             preview_texture: None,
@@ -26,64 +34,85 @@ impl ReceiverPageState {
             status: String::new(),
             frames_seen: 0,
             decode_hits: 0,
+            printed_last: String::new(),
         };
         state.refresh_devices();
+        if state.config.auto_start {
+            state.start();
+        } else {
+            state.status = "Ready. Press Space to start scanning.".to_string();
+        }
         state
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        ui.heading("Camera Receiver (Phase 1)");
-        ui.label("Open a camera stream and decode QR text from sender screen.");
-        ui.add_space(8.0);
-
-        ui.horizontal(|ui| {
-            if ui.button("Refresh Cameras").clicked() {
-                self.refresh_devices();
-            }
-
-            if self.scanning {
-                if ui.button("Stop Scanning").clicked() {
-                    self.stop();
-                }
-            } else if ui.button("Start Scanning").clicked() {
-                self.start();
-            }
-        });
-
-        egui::ComboBox::from_label("Camera")
-            .selected_text(
-                self.devices
-                    .get(self.selected_index)
-                    .map(|d| d.human_name.as_str())
-                    .unwrap_or("No camera"),
-            )
-            .show_ui(ui, |ui| {
-                for (idx, device) in self.devices.iter().enumerate() {
-                    ui.selectable_value(&mut self.selected_index, idx, &device.human_name);
-                }
-            });
+    pub fn ui_fullscreen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, show_overlay: bool) {
+        self.handle_keys(ctx);
 
         if self.scanning {
             self.poll_camera(ctx);
             ctx.request_repaint();
         }
 
-        ui.separator();
+        let rect = ui.max_rect();
+        ui.painter().rect_filled(rect, 0.0, egui::Color32::BLACK);
         if let Some(texture) = &self.preview_texture {
-            let size = texture.size_vec2();
-            let max_w = ui.available_width().min(size.x);
-            let scale = if size.x > 0.0 { max_w / size.x } else { 1.0 };
-            ui.image((texture.id(), size * scale));
-        } else {
-            ui.label("No camera preview yet.");
+            let preview_size = texture.size_vec2();
+            let full = ui.available_size();
+            let scale = (full.x / preview_size.x).min(full.y / preview_size.y);
+            let draw_size = preview_size * scale;
+            let offset = egui::vec2((full.x - draw_size.x) * 0.5, (full.y - draw_size.y) * 0.5);
+            let draw_rect = egui::Rect::from_min_size(rect.min + offset, draw_size);
+            ui.painter().image(
+                texture.id(),
+                draw_rect,
+                egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
         }
 
-        ui.separator();
-        ui.label(format!("Frames captured: {}", self.frames_seen));
-        ui.label(format!("Frames decoded: {}", self.decode_hits));
-        ui.label(format!("Last decoded text: {}", self.decoded_text));
-        if !self.status.is_empty() {
-            ui.label(format!("Status: {}", self.status));
+        if show_overlay {
+            egui::Area::new("receiver_overlay".into())
+                .fixed_pos(egui::pos2(16.0, 16.0))
+                .show(ctx, |ui| {
+                    egui::Frame::default()
+                        .fill(egui::Color32::from_black_alpha(170))
+                        .rounding(egui::Rounding::same(6.0))
+                        .inner_margin(egui::Margin::same(8.0))
+                        .show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new("StareDrop Receiver")
+                                    .color(egui::Color32::LIGHT_BLUE)
+                                    .strong(),
+                            );
+                            ui.label(format!("Camera index: {}", self.config.camera_index));
+                            ui.label(format!("Frames captured: {}", self.frames_seen));
+                            ui.label(format!("Frames decoded: {}", self.decode_hits));
+                            ui.label(format!("Status: {}", self.status));
+                            if !self.decoded_text.is_empty() {
+                                ui.separator();
+                                ui.label(format!("Last decoded: {}", self.decoded_text));
+                            }
+                            ui.separator();
+                            ui.label("Controls: Space start/stop, R refresh cameras, Q/Esc quit");
+                        });
+                });
+        }
+    }
+
+    fn handle_keys(&mut self, ctx: &egui::Context) {
+        let toggle = ctx.input(|i| i.key_pressed(egui::Key::Space));
+        if toggle {
+            if self.scanning {
+                self.stop();
+            } else {
+                self.start();
+            }
+        }
+
+        let refresh = ctx.input(|i| i.key_pressed(egui::Key::R));
+        if refresh {
+            self.refresh_devices();
+            self.status = "Camera list refreshed.".to_string();
         }
     }
 
@@ -91,14 +120,9 @@ impl ReceiverPageState {
         match list_cameras() {
             Ok(devices) => {
                 self.devices = devices;
-                if self.selected_index >= self.devices.len() {
-                    self.selected_index = 0;
-                }
-                self.status = format!("Found {} camera device(s).", self.devices.len());
             }
             Err(err) => {
                 self.devices.clear();
-                self.selected_index = 0;
                 self.status = format!("Camera enumeration failed: {err}");
             }
         }
@@ -106,15 +130,25 @@ impl ReceiverPageState {
 
     fn start(&mut self) {
         if self.devices.is_empty() {
-            self.status = "No cameras available.".to_string();
+            self.status = "No cameras available. Press R to refresh.".to_string();
             return;
         }
-        let index = self.devices[self.selected_index].index;
+
+        if self.config.camera_index >= self.devices.len() {
+            self.status = format!(
+                "Camera index {} not available ({} device(s)).",
+                self.config.camera_index,
+                self.devices.len()
+            );
+            return;
+        }
+
+        let index = self.devices[self.config.camera_index].index;
         match CameraCapture::open(index) {
             Ok(capture) => {
                 self.capture = Some(capture);
                 self.scanning = true;
-                self.status = "Camera stream opened.".to_string();
+                self.status = "Scanning started.".to_string();
             }
             Err(err) => {
                 self.status = format!("Failed to open camera: {err}");
@@ -154,7 +188,13 @@ impl ReceiverPageState {
 
                 if let Ok(Some(text)) = decode_first_qr_text(&frame.to_gray()) {
                     self.decode_hits += 1;
+                    self.status = "QR decoded.".to_string();
                     self.decoded_text = text;
+
+                    if self.config.print_decoded && self.decoded_text != self.printed_last {
+                        println!("{}", self.decoded_text);
+                        self.printed_last = self.decoded_text.clone();
+                    }
                 }
             }
             Err(err) => {

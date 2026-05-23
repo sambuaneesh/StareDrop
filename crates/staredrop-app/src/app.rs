@@ -1,49 +1,58 @@
 use eframe::egui;
 
-use crate::{
-    benchmark_page::BenchmarkPageState, receiver_page::ReceiverPageState,
-    sender_page::SenderPageState,
-};
+use crate::receiver_page::{ReceiverConfig, ReceiverPageState};
+use crate::sender_page::{SenderConfig, SenderPageState};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TopTab {
-    Sender,
-    Receiver,
-    Benchmark,
+#[derive(Debug, Clone)]
+pub enum LaunchMode {
+    Sender(SenderConfig),
+    Receiver(ReceiverConfig),
+}
+
+enum RuntimeMode {
+    Sender(SenderPageState),
+    Receiver(ReceiverPageState),
 }
 
 pub struct StareDropApp {
-    selected_tab: TopTab,
-    sender: SenderPageState,
-    receiver: ReceiverPageState,
-    benchmark: BenchmarkPageState,
+    mode: RuntimeMode,
+    show_overlay: bool,
 }
 
 impl StareDropApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        Self {
-            selected_tab: TopTab::Sender,
-            sender: SenderPageState::default(),
-            receiver: ReceiverPageState::new(),
-            benchmark: BenchmarkPageState::default(),
+    pub fn new(cc: &eframe::CreationContext<'_>, mode: LaunchMode, show_overlay: bool) -> Self {
+        let mode = match mode {
+            LaunchMode::Sender(config) => RuntimeMode::Sender(SenderPageState::new(config, cc)),
+            LaunchMode::Receiver(config) => RuntimeMode::Receiver(ReceiverPageState::new(config)),
+        };
+        Self { mode, show_overlay }
+    }
+
+    fn handle_global_shortcuts(&mut self, ctx: &egui::Context) {
+        let wants_quit = ctx.input(|i| i.key_pressed(egui::Key::Escape) || i.key_pressed(egui::Key::Q));
+        if wants_quit {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }
 }
 
 impl eframe::App for StareDropApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::top("top_nav").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.selected_tab, TopTab::Sender, "Sender");
-                ui.selectable_value(&mut self.selected_tab, TopTab::Receiver, "Receiver");
-                ui.selectable_value(&mut self.selected_tab, TopTab::Benchmark, "Benchmark");
-            });
-        });
+        self.handle_global_shortcuts(ctx);
 
-        egui::CentralPanel::default().show(ctx, |ui| match self.selected_tab {
-            TopTab::Sender => self.sender.ui(ui, ctx),
-            TopTab::Receiver => self.receiver.ui(ui, ctx),
-            TopTab::Benchmark => self.benchmark.ui(ui),
-        });
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none())
+            .show(ctx, |ui| match &mut self.mode {
+                RuntimeMode::Sender(sender) => sender.ui_fullscreen(ui, ctx, self.show_overlay),
+                RuntimeMode::Receiver(receiver) => receiver.ui_fullscreen(ui, ctx, self.show_overlay),
+            });
+    }
+
+    fn persist_egui_memory(&self) -> bool {
+        false
+    }
+
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        [0.0, 0.0, 0.0, 1.0]
     }
 }
