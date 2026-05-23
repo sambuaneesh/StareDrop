@@ -1,17 +1,39 @@
-# Benchmark Metrics (Planned)
+# Benchmark Metrics
 
-Phase 4 will log per-session metrics:
+Phase 2 includes a terminal-only simulation benchmark path (`simulate`) that runs sender->QR encode->QR decode->receiver reassembly without camera hardware.
 
-- file name and size
-- codec/mode/FPS/chunk size
-- frames displayed/captured/decoded
-- invalid frames and duplicate chunks
-- time to first decode
-- time to completion
-- effective throughput (KB/s)
-- final hash verification result
+## Run
 
-## Current
+```bash
+# default suite
+cargo run -p staredrop-app -- simulate
 
-- Only helper metric function exists in `staredrop-benchmark`.
-- Benchmark UI/export is not implemented yet.
+# custom file
+cargo run -p staredrop-app -- simulate --input-file ./payload.bin --output-dir ./manual-tests/sim-output
+```
+
+## Exported artifacts
+
+- `<output-dir>/simulation-summary.csv`
+- `<output-dir>/simulation-summary.txt`
+- `<output-dir>/received/...` (only when completion succeeds)
+
+## Current metrics per case
+
+- `bytes_in`, `bytes_out`
+- `chunk_size`, `total_chunks`
+- `frames_in_plan`, `loops`, `frames_generated`
+- `frames_dropped` (simulated)
+- `frames_encoded`, `frames_decoded`, `decode_failures`
+- `accepted_chunks`, `duplicate_chunks`, `invalid_chunks`
+- `completed`, `sha_match`, `byte_diff`
+- `total_ms`, `completion_ms`, `encode_ms`, `decode_ms`
+- `modeled_display_ms` (from `fps`)
+- `throughput_kib_s`
+- `compression_ratio` (currently `1.0` in Phase 2)
+- `protocol_overhead_ratio`
+
+## Notes
+
+- Loss/corruption knobs (`drop-every`, `corrupt-every`) are useful for Phase 2 stress testing.
+- Without FEC/retransmit strategy, lossy runs may fail to complete (expected until later phases).

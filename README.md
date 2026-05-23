@@ -33,10 +33,11 @@ flowchart TD
 Implemented:
 
 - Cargo workspace with modular crates
-- CLI-first desktop runtime (`sender`, `receiver`, `list-cameras`)
+- CLI-first desktop runtime (`sender`, `receiver`, `list-cameras`, `simulate`)
 - Fullscreen static QR sender (terminal-configured)
 - Fullscreen camera QR receiver (terminal-configured)
 - Phase 2 animated QR file transfer (manifest + data frames)
+- Camera-free simulation mode for automated sender->QR->decode->receiver benchmarking
 - Chunking/reassembly + CRC validation
 - End-to-end SHA-256 verification and output save path controls
 - Core protocol/session/chunking utilities and tests
@@ -113,6 +114,29 @@ cargo run -p staredrop-app -- --fullscreen false sender --text "hello"
 cargo run -p staredrop-app -- --overlay false receiver --camera-index 0
 ```
 
+Simulation mode (camera-free end-to-end benchmark):
+
+```bash
+# default suite: 1KB, 10KB, 100KB, 1MB, text
+cargo run -p staredrop-app -- simulate
+
+# custom file with stress knobs
+cargo run -p staredrop-app -- simulate \
+  --input-file ./payload.bin \
+  --chunk-size 700 \
+  --loops 2 \
+  --drop-every 9 \
+  --corrupt-every 17 \
+  --reverse-data-order true \
+  --output-dir ./manual-tests/sim-output-lossy
+```
+
+Simulation outputs:
+
+- `<output-dir>/received/...` reconstructed files (when transfer completes)
+- `<output-dir>/simulation-summary.csv` benchmark metrics
+- `<output-dir>/simulation-summary.txt` human-readable summary
+
 ## Test
 
 ```bash
@@ -139,6 +163,7 @@ cargo test --workspace
 - No adaptive retransmit yet (sender currently loops full frame set).
 - No compression/encryption yet.
 - No FEC yet.
+- Lossy/corrupted simulated links can fail to complete without FEC (expected in Phase 2).
 
 ## Terminal Usage Reference
 

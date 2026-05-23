@@ -7,6 +7,7 @@ use staredrop_camera::list_cameras;
 use crate::app::LaunchMode;
 use crate::receiver_page::ReceiverConfig;
 use crate::sender_page::SenderConfig;
+use crate::simulate::{SimulateArgs, run_simulation_suite};
 use crate::transfer::{SenderBuildOptions, build_file_sender_plan, build_text_sender_plan};
 
 #[derive(Debug, Parser)]
@@ -43,6 +44,10 @@ pub enum Command {
     Receiver(ReceiverArgs),
     #[command(about = "List available camera devices and exit")]
     ListCameras,
+    #[command(
+        about = "Run camera-free end-to-end sender->QR->decoder->receiver simulation and benchmark"
+    )]
+    Simulate(SimulateArgs),
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -140,8 +145,14 @@ pub fn resolve_launch_mode(command: Command) -> Result<LaunchMode> {
             output_dir: args.output_dir,
             auto_save: args.auto_save,
         })),
-        Command::ListCameras => bail!("list-cameras does not launch the GUI"),
+        Command::ListCameras | Command::Simulate(_) => {
+            bail!("list-cameras/simulate do not launch the GUI")
+        }
     }
+}
+
+pub fn run_simulate_cli(args: SimulateArgs) -> Result<()> {
+    run_simulation_suite(args)
 }
 
 fn resolve_sender(args: SenderArgs) -> Result<SenderConfig> {

@@ -13,6 +13,7 @@ cargo run -p staredrop-app -- [global-flags] <subcommand> [subcommand-flags]
 1. `list-cameras`
 2. `sender`
 3. `receiver`
+4. `simulate`
 
 ## Global flags
 
@@ -66,6 +67,37 @@ cargo run -p staredrop-app -- receiver --camera-index 1 --output-file ./received
 2. `R`: refresh camera list
 3. `S`: manual save (useful with `--auto-save false`)
 4. `Q` or `Esc`: quit app
+
+## Simulate flags (camera-free benchmark mode)
+
+1. `--input-file <PATH>` (repeatable): file(s) to simulate. If omitted, default suite is generated.
+2. `--output-dir <PATH>` (default: `manual-tests/sim-output`)
+3. `--chunk-size <N>` (default: `700`)
+4. `--fps <N>` (default: `8`) modeled display FPS for time reporting
+5. `--loops <N>` (default: `1`) repeat full sender frame cycle N times
+6. `--reverse-data-order <true|false>` (default: `false`)
+7. `--drop-every <N>` (default: `0`) drop every Nth DATA frame before decode
+8. `--corrupt-every <N>` (default: `0`) corrupt every Nth DATA frame before encode
+
+Examples:
+
+```bash
+cargo run -p staredrop-app -- simulate
+
+cargo run -p staredrop-app -- simulate \
+  --input-file ./manual-tests/phase2/sample-100kb.bin \
+  --loops 2 \
+  --drop-every 9 \
+  --corrupt-every 17 \
+  --reverse-data-order true \
+  --output-dir ./manual-tests/sim-output-lossy
+```
+
+Simulation writes:
+
+1. `<output-dir>/received/...` reconstructed files
+2. `<output-dir>/simulation-summary.csv`
+3. `<output-dir>/simulation-summary.txt`
 
 ## Linux / WSL notes
 

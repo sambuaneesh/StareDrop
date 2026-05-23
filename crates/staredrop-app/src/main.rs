@@ -2,6 +2,7 @@ mod app;
 mod cli;
 mod receiver_page;
 mod sender_page;
+mod simulate;
 mod transfer;
 
 use app::{LaunchMode, StareDropApp};
@@ -20,6 +21,12 @@ fn main() {
     if matches!(&cli.command, Command::ListCameras) {
         if let Err(err) = cli::list_cameras_cli() {
             eprintln!("Failed to list cameras: {err}");
+        }
+        return;
+    }
+    if let Command::Simulate(args) = &cli.command {
+        if let Err(err) = cli::run_simulate_cli(args.clone()) {
+            eprintln!("Simulation failed: {err}");
         }
         return;
     }
