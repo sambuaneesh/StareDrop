@@ -1,4 +1,4 @@
-use optigap_protocol::frame_json::{JsonFrame, deserialize_frame, serialize_frame};
+use staredrop_protocol::frame_json::{JsonFrame, deserialize_frame, serialize_frame};
 
 #[test]
 fn phase1_json_frame_roundtrip() {

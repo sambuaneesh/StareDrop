@@ -13,5 +13,5 @@ Phase 4 will log per-session metrics:
 
 ## Current
 
-- Only helper metric function exists in `optigap-benchmark`.
+- Only helper metric function exists in `staredrop-benchmark`.
 - Benchmark UI/export is not implemented yet.

@@ -1,16 +1,16 @@
 [workspace]
 members = [
-    "crates/optigap-app",
-    "crates/optigap-core",
-    "crates/optigap-protocol",
-    "crates/optigap-chunking",
-    "crates/optigap-codec-qr",
-    "crates/optigap-codec-grid",
-    "crates/optigap-camera",
-    "crates/optigap-crypto",
-    "crates/optigap-compression",
-    "crates/optigap-reliability",
-    "crates/optigap-benchmark",
+    "crates/staredrop-app",
+    "crates/staredrop-core",
+    "crates/staredrop-protocol",
+    "crates/staredrop-chunking",
+    "crates/staredrop-codec-qr",
+    "crates/staredrop-codec-grid",
+    "crates/staredrop-camera",
+    "crates/staredrop-crypto",
+    "crates/staredrop-compression",
+    "crates/staredrop-reliability",
+    "crates/staredrop-benchmark",
 ]
 resolver = "2"
 
@@ -19,7 +19,7 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 rust-version = "1.85"
-authors = ["OptiGap Contributors"]
+authors = ["StareDrop Contributors"]
 
 [workspace.dependencies]
 anyhow = "1.0"

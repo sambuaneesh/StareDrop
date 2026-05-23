@@ -1,0 +1,18 @@
+[package]
+name = "staredrop-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+eframe.workspace = true
+egui.workspace = true
+image.workspace = true
+rfd.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+staredrop-camera = { path = "../staredrop-camera" }
+staredrop-codec-qr = { path = "../staredrop-codec-qr" }
+staredrop-core = { path = "../staredrop-core" }

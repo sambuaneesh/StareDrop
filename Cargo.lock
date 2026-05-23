@@ -2579,123 +2579,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
-name = "optigap-app"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "eframe",
- "egui",
- "image 0.25.10",
- "optigap-camera",
- "optigap-codec-qr",
- "optigap-core",
- "rfd",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "optigap-benchmark"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "optigap-camera"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "glob",
- "image 0.25.10",
- "rscam",
- "serde",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "optigap-chunking"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "crc32fast",
- "optigap-core",
- "serde",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "optigap-codec-grid"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "image 0.25.10",
- "optigap-core",
-]
-
-[[package]]
-name = "optigap-codec-qr"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "image 0.25.10",
- "optigap-core",
- "qrcode",
- "rqrr",
-]
-
-[[package]]
-name = "optigap-compression"
-version = "0.1.0"
-dependencies = [
- "anyhow",
-]
-
-[[package]]
-name = "optigap-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "serde",
- "thiserror 2.0.18",
- "uuid",
-]
-
-[[package]]
-name = "optigap-crypto"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "sha2",
-]
-
-[[package]]
-name = "optigap-protocol"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64",
- "bincode",
- "crc32fast",
- "optigap-core",
- "postcard",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "optigap-reliability"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "optigap-core",
-]
-
-[[package]]
 name = "orbclient"
 version = "0.3.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3469,6 +3352,123 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
+
+[[package]]
+name = "staredrop-app"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "eframe",
+ "egui",
+ "image 0.25.10",
+ "rfd",
+ "staredrop-camera",
+ "staredrop-codec-qr",
+ "staredrop-core",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "staredrop-benchmark"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "staredrop-camera"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "glob",
+ "image 0.25.10",
+ "rscam",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "staredrop-chunking"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "crc32fast",
+ "serde",
+ "staredrop-core",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "staredrop-codec-grid"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "image 0.25.10",
+ "staredrop-core",
+]
+
+[[package]]
+name = "staredrop-codec-qr"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "image 0.25.10",
+ "qrcode",
+ "rqrr",
+ "staredrop-core",
+]
+
+[[package]]
+name = "staredrop-compression"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
+name = "staredrop-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "serde",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "staredrop-crypto"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "sha2",
+]
+
+[[package]]
+name = "staredrop-protocol"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "bincode",
+ "crc32fast",
+ "postcard",
+ "serde",
+ "serde_json",
+ "staredrop-core",
+]
+
+[[package]]
+name = "staredrop-reliability"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "staredrop-core",
+]
 
 [[package]]
 name = "static_assertions"

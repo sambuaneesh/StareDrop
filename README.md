@@ -1,6 +1,6 @@
-# OptiGap
+# StareDrop
 
-OptiGap is a Rust-only desktop project for offline optical transfer:
+StareDrop is a Rust-only desktop project for offline optical transfer:
 
 - sender device displays encoded visual frames on screen
 - receiver device captures with camera
@@ -50,17 +50,17 @@ Not implemented yet:
 
 See root [Cargo.toml](Cargo.toml) and:
 
-- [crates/optigap-app](crates/optigap-app)
-- [crates/optigap-core](crates/optigap-core)
-- [crates/optigap-protocol](crates/optigap-protocol)
-- [crates/optigap-chunking](crates/optigap-chunking)
-- [crates/optigap-codec-qr](crates/optigap-codec-qr)
-- [crates/optigap-camera](crates/optigap-camera)
+- [crates/staredrop-app](crates/staredrop-app)
+- [crates/staredrop-core](crates/staredrop-core)
+- [crates/staredrop-protocol](crates/staredrop-protocol)
+- [crates/staredrop-chunking](crates/staredrop-chunking)
+- [crates/staredrop-codec-qr](crates/staredrop-codec-qr)
+- [crates/staredrop-camera](crates/staredrop-camera)
 
 ## Run
 
 ```bash
-cargo run -p optigap-app
+cargo run -p staredrop-app
 ```
 
 ## Test

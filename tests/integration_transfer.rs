@@ -1,5 +1,5 @@
-use optigap_chunking::{chunker::FixedSizeChunker, reassembler::BasicReassembler};
-use optigap_core::{Chunker, Reassembler};
+use staredrop_chunking::{chunker::FixedSizeChunker, reassembler::BasicReassembler};
+use staredrop_core::{Chunker, Reassembler};
 
 #[test]
 fn chunk_transfer_reconstructs_original_payload() {

@@ -1,4 +1,4 @@
-# OptiGap MVP Roadmap
+# StareDrop MVP Roadmap
 
 ## Current phase status
 

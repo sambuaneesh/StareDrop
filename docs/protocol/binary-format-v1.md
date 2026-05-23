@@ -4,7 +4,7 @@ Binary mode is planned for Phase 6 to reduce JSON/Base64 overhead.
 
 ## Header layout (little-endian)
 
-- `magic`: 4 bytes (`OPTG`)
+- `magic`: 4 bytes (`STRD`)
 - `version`: 1 byte
 - `frame_type`: 1 byte
 - `flags`: 2 bytes

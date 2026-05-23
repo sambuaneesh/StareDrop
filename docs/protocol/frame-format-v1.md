@@ -2,7 +2,7 @@
 
 ## Magic and version
 
-- `magic`: `"OPTIGAP"`
+- `magic`: `"STAREDROP"`
 - `version`: `1`
 
 ## Frame types
@@ -17,7 +17,7 @@
 
 ```json
 {
-  "magic": "OPTIGAP",
+  "magic": "STAREDROP",
   "version": 1,
   "frame_type": "MANIFEST",
   "session_id": "uuid",
@@ -39,7 +39,7 @@
 
 ```json
 {
-  "magic": "OPTIGAP",
+  "magic": "STAREDROP",
   "version": 1,
   "frame_type": "DATA",
   "session_id": "uuid",
@@ -55,7 +55,7 @@
 
 ```json
 {
-  "magic": "OPTIGAP",
+  "magic": "STAREDROP",
   "version": 1,
   "frame_type": "CONTROL",
   "session_id": "uuid",
