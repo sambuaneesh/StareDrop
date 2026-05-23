@@ -70,3 +70,26 @@
 
 - Per-frame payload CRC32 for early corruption rejection.
 - End-to-end SHA-256 verification after reassembly.
+
+## Future extension: Color/contrast codec profile (planned)
+
+This is not active in V1, but reserved for future high-throughput modes.
+
+Proposed manifest additions (future version):
+
+- `visual_codec`: `qr` | `grid_mono` | `grid_color`
+- `color_profile`: `none` | `bw` | `bw_rg` | `bw_rgb`
+- `cell_bits`: bits represented by each sampled cell/symbol
+- `calibration_required`: bool
+- `calibration_frame_interval`: number of frames between calibration refresh
+
+Proposed frame-level additions (future version):
+
+- `palette_id`: sender-selected palette identifier
+- `frame_exposure_hint`: optional normalization hint
+- `color_checksum`: checksum across quantized symbol channels
+
+Compatibility rule:
+
+- Receiver must reject unknown active `visual_codec` modes unless explicitly supported.
+- Sender must provide a fallback profile (`qr` or `grid_mono`) when operating in mixed-capability environments.

@@ -37,3 +37,20 @@ cargo run -p staredrop-app -- simulate --input-file ./payload.bin --output-dir .
 
 - Loss/corruption knobs (`drop-every`, `corrupt-every`) are useful for Phase 2 stress testing.
 - Without FEC/retransmit strategy, lossy runs may fail to complete (expected until later phases).
+
+## Future metrics for contrasting-color throughput work
+
+When color-based codec modes are introduced, add:
+
+- `palette_profile` (which contrast palette was used)
+- per-channel symbol error rate (R/G/B or selected channels)
+- calibration success/failure count
+- post-calibration decode uplift vs no-calibration baseline
+- throughput delta vs monochrome baseline at same noise profile
+- completion success rate by lighting profile (dark/normal/bright)
+- completion success rate by viewing angle bucket
+
+Acceptance target for enabling color by default:
+
+- statistically higher median throughput than monochrome baseline
+- no material reduction in file reconstruction integrity success

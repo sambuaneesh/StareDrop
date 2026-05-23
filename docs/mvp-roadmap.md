@@ -38,3 +38,32 @@ Next milestone is small file transfer over animated QR:
 3. [x] repeated frame animation
 4. [x] integrity verification and output save flow
 5. [ ] manual two-device reliability validation matrix
+
+## Future throughput track (planned)
+
+Goal: increase effective data throughput by encoding more bits per visual cell using high-contrast multi-color symbols.
+
+Planned direction:
+
+1. Add a new `ColorGrid` experimental codec profile after monochrome grid stability.
+2. Use a constrained, high-contrast palette first (for example black/white + 2 accent colors), then expand only if error rates remain acceptable.
+3. Introduce calibration frames before payload frames:
+   - white balance reference
+   - per-channel gain normalization
+   - brightness/exposure sanity check
+4. Keep codec modular under `VisualEncoder`/`VisualDecoder` traits so QR mode remains available as fallback.
+5. Add adaptive density/palette mode switching:
+   - `Safe`: monochrome only
+   - `Balanced`: limited color symbols
+   - `Fast`: higher color symbol density
+6. Require benchmark evidence before defaulting to color mode:
+   - higher effective KiB/s than monochrome/QR
+   - acceptable frame decode success rate in varied lighting
+   - no regression in end-to-end integrity success
+
+Risks to address in this track:
+
+- display color profile variability across devices
+- camera auto-exposure and white-balance drift
+- compression and sensor noise causing channel cross-talk
+- reduced robustness at oblique viewing angles
