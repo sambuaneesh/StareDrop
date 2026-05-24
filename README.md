@@ -38,6 +38,7 @@ Implemented:
 - Fullscreen camera QR receiver (terminal-configured)
 - Phase 2 animated QR file transfer (manifest + data frames)
 - Camera-free simulation mode for automated sender->QR->decode->receiver benchmarking
+- Experimental color-grid visual codec path in simulation (`--visual-codec color-grid`)
 - Chunking/reassembly + CRC validation
 - End-to-end SHA-256 verification and output save path controls
 - Core protocol/session/chunking utilities and tests
@@ -136,6 +137,8 @@ Simulation outputs:
 - `<output-dir>/received/...` reconstructed files (when transfer completes)
 - `<output-dir>/simulation-summary.csv` benchmark metrics
 - `<output-dir>/simulation-summary.txt` human-readable summary
+- default benchmark history append: `docs/research/benchmark-history.csv`
+- example benchmark report: `docs/research/benchmark-results-2026-05-24.md`
 
 ## Test
 

@@ -17,6 +17,7 @@ cargo run -p staredrop-app -- simulate --input-file ./payload.bin --output-dir .
 - `<output-dir>/simulation-summary.csv`
 - `<output-dir>/simulation-summary.txt`
 - `<output-dir>/received/...` (only when completion succeeds)
+- history CSV append (default): `docs/research/benchmark-history.csv`
 
 ## Current metrics per case
 
@@ -30,8 +31,17 @@ cargo run -p staredrop-app -- simulate --input-file ./payload.bin --output-dir .
 - `total_ms`, `completion_ms`, `encode_ms`, `decode_ms`
 - `modeled_display_ms` (from `fps`)
 - `throughput_kib_s`
+- `modeled_link_kib_s` (throughput limited by modeled FPS/frame count)
 - `compression_ratio` (currently `1.0` in Phase 2)
 - `protocol_overhead_ratio`
+
+## Long-term benchmark logging policy
+
+- Keep `--record-history true` for all experiment runs unless debugging.
+- Always set `--run-label` to identify the experiment variant.
+- Use separate `--output-dir` paths per run family.
+- Treat `modeled_link_kib_s` as the primary cross-codec metric for transfer-speed claims.
+- Treat `throughput_kib_s` as host/runtime performance (useful for optimization, but hardware-dependent).
 
 ## Notes
 

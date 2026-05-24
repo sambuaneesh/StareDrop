@@ -5,6 +5,7 @@
 - Phase 0: **Completed**
 - Phase 1: **Completed**
 - Phase 2: **In progress (animated QR file transfer MVP implemented)**
+- Phase 2: **In progress (animated QR file transfer + simulation benchmark harness implemented)**
 - Phase 3+: **Not started**
 
 ## Phase 0 checklist
@@ -38,6 +39,12 @@ Next milestone is small file transfer over animated QR:
 3. [x] repeated frame animation
 4. [x] integrity verification and output save flow
 5. [ ] manual two-device reliability validation matrix
+
+## Experimental progress (pre-Phase 9)
+
+- [x] Added simulation-only `color-grid` codec path for throughput experiments.
+- [x] Added persistent benchmark history logging (`docs/research/benchmark-history.csv`).
+- [ ] Add camera-path color-grid decode with calibration/correction pipeline.
 
 ## Future throughput track (planned)
 

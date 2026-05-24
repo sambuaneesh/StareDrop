@@ -78,6 +78,13 @@ cargo run -p staredrop-app -- receiver --camera-index 1 --output-file ./received
 6. `--reverse-data-order <true|false>` (default: `false`)
 7. `--drop-every <N>` (default: `0`) drop every Nth DATA frame before decode
 8. `--corrupt-every <N>` (default: `0`) corrupt every Nth DATA frame before encode
+9. `--visual-codec <qr|color-grid>` (default: `qr`)
+10. `--grid-side <N>` (default: `96`) color-grid side length in cells
+11. `--cell-pixels <N>` (default: `8`) color-grid cell size
+12. `--quiet-zone-cells <N>` (default: `2`) color-grid quiet-zone
+13. `--record-history <true|false>` (default: `true`)
+14. `--history-file <PATH>` (default: `docs/research/benchmark-history.csv`)
+15. `--run-label <TEXT>` optional label for history rows
 
 Examples:
 
@@ -91,6 +98,20 @@ cargo run -p staredrop-app -- simulate \
   --corrupt-every 17 \
   --reverse-data-order true \
   --output-dir ./manual-tests/sim-output-lossy
+
+cargo run -p staredrop-app -- simulate \
+  --input-file ./manual-tests/phase2/sample-100kb.bin \
+  --visual-codec color-grid \
+  --grid-side 128 \
+  --cell-pixels 8 \
+  --chunk-size 1800 \
+  --fps 12 \
+  --loops 3 \
+  --drop-every 9 \
+  --corrupt-every 23 \
+  --reverse-data-order true \
+  --run-label color-grid-c1800-exp \
+  --output-dir ./manual-tests/bench-sweeps/2026-05-24-color/color-grid-c1800-f12
 ```
 
 Simulation writes:

@@ -4,6 +4,12 @@ Reviewed on **May 23, 2026**.
 
 License checks were verified from GitHub repository metadata/API on this date.
 
+Re-verified selected licenses on **May 24, 2026** from repository `LICENSE` files:
+
+- TXQR license text: https://raw.githubusercontent.com/divan/txqr/master/LICENSE (MIT)
+- cimbar license text: https://raw.githubusercontent.com/sz3/cimbar/master/LICENSE (MIT)
+- libcimbar license text: https://raw.githubusercontent.com/sz3/libcimbar/master/LICENSE (MPL-2.0)
+
 ## 1) ShadowCat
 
 - Project: ShadowCat
