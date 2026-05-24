@@ -93,7 +93,10 @@ pub fn encode_color_grid_frame(
 
     let quiet = cfg.quiet_zone_cells as u32;
     for idx in 0..cell_count {
-        let symbol = symbols.get(idx).copied().unwrap_or(0);
+        let symbol = symbols
+            .get(idx)
+            .copied()
+            .unwrap_or_else(|| padding_symbol(idx, cell_count));
         let color = cfg.palette.color(symbol);
         let x = idx % cfg.grid_side as usize;
         let y = idx / cfg.grid_side as usize;
@@ -135,9 +138,20 @@ fn bytes_to_symbols_2bit(bytes: &[u8]) -> Vec<u8> {
     out
 }
 
+fn padding_symbol(idx: usize, total_cells: usize) -> u8 {
+    // Deterministic pseudo-random filler so unused cells don't collapse into one dark block.
+    let mut x = (idx as u64)
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        .wrapping_add(total_cells as u64);
+    x ^= x >> 12;
+    x ^= x << 25;
+    x ^= x >> 27;
+    ((x >> 30) & 0b11) as u8
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{ColorGridConfig, encode_color_grid_frame};
+    use super::{ColorGridConfig, encode_color_grid_frame, padding_symbol};
 
     #[test]
     fn encode_produces_square_image() {
@@ -145,5 +159,14 @@ mod tests {
             encode_color_grid_frame(b"hello", ColorGridConfig::default()).expect("encode");
         assert_eq!(encoded.image.width(), encoded.image.height());
         assert!(encoded.payload_bytes >= 5);
+    }
+
+    #[test]
+    fn padding_uses_all_symbols() {
+        let mut seen = [false; 4];
+        for i in 0..256 {
+            seen[padding_symbol(i, 4096) as usize] = true;
+        }
+        assert!(seen.into_iter().all(|s| s));
     }
 }

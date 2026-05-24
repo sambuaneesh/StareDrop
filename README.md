@@ -103,9 +103,10 @@ cargo run -p staredrop-app -- sender \
   --grid-side 128 \
   --cell-pixels 8 \
   --quiet-zone-cells 2 \
-  --chunk-size 1800 \
   --fps 12
 ```
+
+For color-grid, if `--chunk-size` is omitted, StareDrop now auto-selects a near-max chunk size for the chosen grid/cell settings.
 
 Receiver mode:
 

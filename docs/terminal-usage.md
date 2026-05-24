@@ -26,7 +26,7 @@ cargo run -p staredrop-app -- [global-flags] <subcommand> [subcommand-flags]
 2. `--input-file <PATH>`: static QR payload from file.
 3. `--send-file <PATH>`: Phase 2 animated file-transfer source file.
 4. `--input-format <utf8|base64>` (default: `utf8`) for `--input-file`.
-5. `--chunk-size <N>` (default: `700`) for `--send-file`.
+5. `--chunk-size <N>` for `--send-file` (optional).
 6. `--fps <N>` (default: `8`) for sender frame animation.
 7. `--visual-codec <qr|color-grid>` (default: `qr`)
 8. `--grid-side <N>` (default: `96`) for color-grid
@@ -37,6 +37,7 @@ Rules:
 
 1. Use exactly one of `--text`, `--input-file`, or `--send-file`.
 2. If using `--input-file` with binary content, use `--input-format base64`.
+3. In `--visual-codec color-grid` mode, omitting `--chunk-size` auto-selects near-max payload utilization for the chosen grid settings.
 
 Examples:
 
@@ -45,7 +46,7 @@ cargo run -p staredrop-app -- sender --text "hello world"
 cargo run -p staredrop-app -- sender --input-file ./payload.txt --input-format utf8
 cargo run -p staredrop-app -- sender --input-file ./sample.bin --input-format base64
 cargo run -p staredrop-app -- sender --send-file ./payload.bin --chunk-size 700 --fps 8
-cargo run -p staredrop-app -- sender --send-file ./payload.bin --visual-codec color-grid --grid-side 128 --cell-pixels 8 --quiet-zone-cells 2 --chunk-size 1800 --fps 12
+cargo run -p staredrop-app -- sender --send-file ./payload.bin --visual-codec color-grid --grid-side 128 --cell-pixels 8 --quiet-zone-cells 2 --fps 12
 ```
 
 ## Receiver flags
