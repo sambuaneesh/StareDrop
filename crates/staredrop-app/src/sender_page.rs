@@ -31,6 +31,7 @@ pub struct SenderPageState {
     loop_count: u64,
     last_switch_at: Instant,
     active_grid_side: Option<u16>,
+    active_pixel_size: Option<u16>,
     active_chunk_size: Option<usize>,
 }
 
@@ -45,6 +46,7 @@ impl SenderPageState {
             loop_count: 0,
             last_switch_at: Instant::now(),
             active_grid_side: None,
+            active_pixel_size: None,
             active_chunk_size: None,
         };
         if !matches!(state.config.visual_codec, VisualCodecConfig::ColorGrid(_)) {
@@ -91,10 +93,12 @@ impl SenderPageState {
                 }
             },
             VisualCodecConfig::ColorGrid(grid) => {
+                let pixel_size = self.active_pixel_size.unwrap_or(grid.pixel_size.max(1));
+                let runtime = crate::visual_codec::ColorGridParams { pixel_size };
                 let grid_side = self
                     .active_grid_side
-                    .unwrap_or_else(|| grid.grid_side_for_square_points(1080.0));
-                let grid_cfg = grid.config_for_grid_side(grid_side);
+                    .unwrap_or_else(|| runtime.grid_side_for_square_points(1080.0));
+                let grid_cfg = runtime.config_for_grid_side(grid_side);
                 match encode_color_grid_frame(self.current_frame_text().as_bytes(), grid_cfg) {
                     Ok(encoded) => {
                         let rgba = DynamicImage::ImageRgb8(encoded.image.clone())
@@ -123,8 +127,13 @@ impl SenderPageState {
                             (encoded.payload_bytes as f64 / max_payload as f64) * 100.0
                         };
                         self.status = format!(
-                            "Displaying color-grid frame ({}x{}, payload {} B / {} B, {:.1}% utilized)",
-                            grid_side, grid_side, encoded.payload_bytes, max_payload, utilization
+                            "Displaying color-grid frame ({}x{}, pixel {} px, payload {} B / {} B, {:.1}% utilized)",
+                            grid_side,
+                            grid_side,
+                            pixel_size,
+                            encoded.payload_bytes,
+                            max_payload,
+                            utilization
                         );
                         true
                     }
@@ -170,38 +179,73 @@ impl SenderPageState {
             return;
         };
 
-        let grid_side = params.grid_side_for_square_points(square_points);
-        let side_changed = self.active_grid_side != Some(grid_side);
+        let active_px = self.active_pixel_size.unwrap_or(params.pixel_size.max(1));
+        let active_runtime = crate::visual_codec::ColorGridParams {
+            pixel_size: active_px,
+        };
+        let expected_side = active_runtime.grid_side_for_square_points(square_points);
+        let active_side = self.active_grid_side.unwrap_or(expected_side);
+        let active_limit = active_runtime
+            .config_for_grid_side(active_side)
+            .max_payload_bytes();
+        let plan_fits = plan_fits_payload_limit(&self.config.plan, active_limit);
+        let reconfigure_needed = self.active_pixel_size.is_none()
+            || self.active_grid_side.is_none()
+            || active_side != expected_side
+            || !plan_fits;
 
-        if side_changed {
-            self.active_grid_side = Some(grid_side);
-            let payload_limit = params.config_for_grid_side(grid_side).max_payload_bytes();
+        if !reconfigure_needed {
+            return;
+        }
+
+        let preferred_px = params.pixel_size.max(1);
+        let mut applied = false;
+        for px in (1..=preferred_px).rev() {
+            let runtime = crate::visual_codec::ColorGridParams { pixel_size: px };
+            let side = runtime.grid_side_for_square_points(square_points);
+            let payload_limit = runtime.config_for_grid_side(side).max_payload_bytes();
 
             if self.config.requested_chunk_size.is_none() {
                 if let Some(path) = self.config.source_file.clone() {
-                    match find_best_color_grid_plan(&path, payload_limit) {
-                        Ok((chunk_size, plan)) => {
-                            self.config.plan = plan;
-                            self.active_chunk_size = Some(chunk_size);
-                            self.current_frame_index = 0;
-                            self.loop_count = 0;
-                            self.status = format!(
-                                "Auto chunk-size selected: {} bytes (grid {}x{})",
-                                chunk_size, grid_side, grid_side
-                            );
-                        }
-                        Err(err) => {
-                            self.status = format!("Failed to build fitting color-grid plan: {err}");
-                        }
+                    if let Ok((chunk_size, plan)) = find_best_color_grid_plan(&path, payload_limit)
+                    {
+                        self.config.plan = plan;
+                        self.active_chunk_size = Some(chunk_size);
+                        self.active_pixel_size = Some(px);
+                        self.active_grid_side = Some(side);
+                        self.current_frame_index = 0;
+                        self.loop_count = 0;
+                        self.status = format!(
+                            "Auto config selected: pixel {} px, grid {}x{}, chunk {}",
+                            px, side, side, chunk_size
+                        );
+                        let _ = self.render_current_frame(ctx);
+                        applied = true;
+                        break;
                     }
+                } else if plan_fits_payload_limit(&self.config.plan, payload_limit) {
+                    self.active_pixel_size = Some(px);
+                    self.active_grid_side = Some(side);
+                    self.active_chunk_size = None;
+                    let _ = self.render_current_frame(ctx);
+                    applied = true;
+                    break;
                 }
-            } else if !plan_fits_payload_limit(&self.config.plan, payload_limit) {
-                self.status = format!(
-                    "Configured chunk-size does not fit current grid capacity ({payload_limit} B max frame payload). Reduce --chunk-size or --pixel-size."
-                );
+            } else if plan_fits_payload_limit(&self.config.plan, payload_limit) {
+                self.active_pixel_size = Some(px);
+                self.active_grid_side = Some(side);
+                self.active_chunk_size = self.config.requested_chunk_size;
+                let _ = self.render_current_frame(ctx);
+                applied = true;
+                break;
             }
+        }
 
-            let _ = self.render_current_frame(ctx);
+        if !applied {
+            self.status = format!(
+                "No working color-grid config for current viewport. Requested pixel {} px is too coarse; reduce --pixel-size or --chunk-size.",
+                params.pixel_size
+            );
         }
     }
 
@@ -265,6 +309,9 @@ impl SenderPageState {
                             ));
                             if let Some(side) = self.active_grid_side {
                                 ui.label(format!("Auto grid: {} x {}", side, side));
+                            }
+                            if let Some(px) = self.active_pixel_size {
+                                ui.label(format!("Active pixel-size: {}", px));
                             }
                             if let Some(chunk_size) = self.active_chunk_size {
                                 ui.label(format!("Auto chunk-size: {}", chunk_size));
