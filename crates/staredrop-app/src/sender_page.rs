@@ -99,9 +99,15 @@ impl SenderPageState {
                         image,
                         TextureOptions::NEAREST,
                     ));
+                    let max_payload = grid.as_codec_config().max_payload_bytes();
+                    let utilization = if max_payload == 0 {
+                        0.0
+                    } else {
+                        (encoded.payload_bytes as f64 / max_payload as f64) * 100.0
+                    };
                     self.status = format!(
-                        "Displaying color-grid frame (payload {} B)",
-                        encoded.payload_bytes
+                        "Displaying color-grid frame (payload {} B / {} B, {:.1}% utilized)",
+                        encoded.payload_bytes, max_payload, utilization
                     );
                 }
                 Err(err) => {
