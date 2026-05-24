@@ -1,14 +1,14 @@
 use std::{
+    fs,
     path::PathBuf,
     time::{Duration, Instant},
 };
 
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use anyhow::{Context, Result, bail};
 use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions};
 use image::DynamicImage;
 use staredrop_codec_grid::encode_color_grid_frame;
 use staredrop_codec_qr::{encode_text_to_qr_luma, render_luma_to_rgba};
-use staredrop_protocol::frame_json::{DataFrameV1, serialize_data_frame};
 
 use crate::transfer::{SenderBuildOptions, SenderPlan, build_file_sender_plan};
 use crate::visual_codec::VisualCodecConfig;
@@ -48,7 +48,7 @@ impl SenderPageState {
             active_chunk_size: None,
         };
         if !matches!(state.config.visual_codec, VisualCodecConfig::ColorGrid(_)) {
-            state.render_current_frame(&cc.egui_ctx);
+            let _ = state.render_current_frame(&cc.egui_ctx);
         }
         state
     }
@@ -67,7 +67,7 @@ impl SenderPageState {
         }
     }
 
-    fn render_current_frame(&mut self, ctx: &egui::Context) {
+    fn render_current_frame(&mut self, ctx: &egui::Context) -> bool {
         match self.config.visual_codec {
             VisualCodecConfig::Qr => match encode_text_to_qr_luma(self.current_frame_text()) {
                 Ok(luma) => {
@@ -83,9 +83,11 @@ impl SenderPageState {
                         TextureOptions::NEAREST,
                     ));
                     self.status = "Displaying QR frame".to_string();
+                    true
                 }
                 Err(err) => {
                     self.status = format!("Failed to encode QR frame: {err}");
+                    false
                 }
             },
             VisualCodecConfig::ColorGrid(grid) => {
@@ -124,9 +126,11 @@ impl SenderPageState {
                             "Displaying color-grid frame ({}x{}, payload {} B / {} B, {:.1}% utilized)",
                             grid_side, grid_side, encoded.payload_bytes, max_payload, utilization
                         );
+                        true
                     }
                     Err(err) => {
                         self.status = format!("Failed to encode color-grid frame: {err}");
+                        false
                     }
                 }
             }
@@ -144,13 +148,21 @@ impl SenderPageState {
             return;
         }
 
-        self.current_frame_index += 1;
-        if self.current_frame_index >= self.frame_count() {
-            self.current_frame_index = 0;
-            self.loop_count += 1;
+        let prev_idx = self.current_frame_index;
+        let prev_loop = self.loop_count;
+        let mut next_idx = self.current_frame_index + 1;
+        let mut next_loop = self.loop_count;
+        if next_idx >= self.frame_count() {
+            next_idx = 0;
+            next_loop += 1;
         }
+        self.current_frame_index = next_idx;
+        self.loop_count = next_loop;
         self.last_switch_at = Instant::now();
-        self.render_current_frame(ctx);
+        if !self.render_current_frame(ctx) {
+            self.current_frame_index = prev_idx;
+            self.loop_count = prev_loop;
+        }
     }
 
     fn update_color_grid_layout(&mut self, ctx: &egui::Context, square_points: f32) {
@@ -163,32 +175,33 @@ impl SenderPageState {
 
         if side_changed {
             self.active_grid_side = Some(grid_side);
+            let payload_limit = params.config_for_grid_side(grid_side).max_payload_bytes();
 
             if self.config.requested_chunk_size.is_none() {
                 if let Some(path) = self.config.source_file.clone() {
-                    let payload_limit = params.config_for_grid_side(grid_side).max_payload_bytes();
-                    let chunk_size = max_color_grid_chunk_size(payload_limit).max(1);
-                    if self.active_chunk_size != Some(chunk_size) {
-                        match build_file_sender_plan(&path, SenderBuildOptions { chunk_size }) {
-                            Ok(plan) => {
-                                self.config.plan = plan;
-                                self.active_chunk_size = Some(chunk_size);
-                                self.current_frame_index = 0;
-                                self.loop_count = 0;
-                                self.status = format!(
-                                    "Auto chunk-size selected: {} bytes (grid {}x{})",
-                                    chunk_size, grid_side, grid_side
-                                );
-                            }
-                            Err(err) => {
-                                self.status = format!("Failed to rebuild sender plan: {err}");
-                            }
+                    match find_best_color_grid_plan(&path, payload_limit) {
+                        Ok((chunk_size, plan)) => {
+                            self.config.plan = plan;
+                            self.active_chunk_size = Some(chunk_size);
+                            self.current_frame_index = 0;
+                            self.loop_count = 0;
+                            self.status = format!(
+                                "Auto chunk-size selected: {} bytes (grid {}x{})",
+                                chunk_size, grid_side, grid_side
+                            );
+                        }
+                        Err(err) => {
+                            self.status = format!("Failed to build fitting color-grid plan: {err}");
                         }
                     }
                 }
+            } else if !plan_fits_payload_limit(&self.config.plan, payload_limit) {
+                self.status = format!(
+                    "Configured chunk-size does not fit current grid capacity ({payload_limit} B max frame payload). Reduce --chunk-size or --pixel-size."
+                );
             }
 
-            self.render_current_frame(ctx);
+            let _ = self.render_current_frame(ctx);
         }
     }
 
@@ -270,19 +283,27 @@ impl SenderPageState {
     }
 }
 
-fn max_color_grid_chunk_size(max_payload_bytes: usize) -> usize {
-    if max_payload_bytes <= 64 {
-        return 1;
+fn find_best_color_grid_plan(path: &PathBuf, payload_limit: usize) -> Result<(usize, SenderPlan)> {
+    if payload_limit < 128 {
+        bail!(
+            "payload limit {} is too small for protocol frames",
+            payload_limit
+        );
     }
 
+    let file_size = fs::metadata(path)
+        .with_context(|| format!("failed to stat input file {}", path.display()))?
+        .len() as usize;
     let mut low = 1usize;
-    let mut high = (max_payload_bytes.saturating_mul(3) / 4).max(1);
-    let mut best = 1usize;
+    let mut high = file_size.max(1).min(payload_limit).max(1);
+    let mut best: Option<(usize, SenderPlan)> = None;
 
     while low <= high {
         let mid = low + (high - low) / 2;
-        if color_grid_chunk_fits(mid, max_payload_bytes) {
-            best = mid;
+        let plan = build_file_sender_plan(path, SenderBuildOptions { chunk_size: mid })
+            .with_context(|| format!("failed building sender plan for chunk-size {}", mid))?;
+        if plan_fits_payload_limit(&plan, payload_limit) {
+            best = Some((mid, plan));
             low = mid.saturating_add(1);
         } else {
             if mid == 0 {
@@ -291,26 +312,24 @@ fn max_color_grid_chunk_size(max_payload_bytes: usize) -> usize {
             high = mid - 1;
         }
     }
-    best
+
+    if let Some(found) = best {
+        return Ok(found);
+    }
+
+    let fallback = build_file_sender_plan(path, SenderBuildOptions { chunk_size: 1 })?;
+    if plan_fits_payload_limit(&fallback, payload_limit) {
+        return Ok((1, fallback));
+    }
+    bail!(
+        "no fitting chunk-size found for payload limit {}; increase frame capacity or reduce pixel-size",
+        payload_limit
+    );
 }
 
-fn color_grid_chunk_fits(chunk_size: usize, max_payload_bytes: usize) -> bool {
-    let payload = vec![0u8; chunk_size];
-    let frame = DataFrameV1 {
-        magic: "STAREDROP".to_string(),
-        version: 1,
-        frame_type: "DATA".to_string(),
-        session_id: "00000000-0000-0000-0000-000000000000".to_string(),
-        file_id: "00000000-0000-0000-0000-000000000000".to_string(),
-        file_name: "payload.bin".to_string(),
-        file_size: payload.len() as u64,
-        chunk_index: 0,
-        total_chunks: 1,
-        payload_base64: BASE64.encode(&payload),
-        crc32: staredrop_protocol::crc::crc32(&payload),
-    };
-    match serialize_data_frame(&frame) {
-        Ok(text) => text.len() <= max_payload_bytes,
-        Err(_) => false,
+fn plan_fits_payload_limit(plan: &SenderPlan, payload_limit: usize) -> bool {
+    match plan {
+        SenderPlan::Text { frame_text } => frame_text.len() <= payload_limit,
+        SenderPlan::File { frames, .. } => frames.iter().all(|f| f.len() <= payload_limit),
     }
 }
