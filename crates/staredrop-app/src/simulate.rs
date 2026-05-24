@@ -1,11 +1,16 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    process::Command,
     time::{Duration, Instant},
 };
 
 use anyhow::{Context, Result, bail};
-use clap::{ArgAction, Args};
+use chrono::Utc;
+use clap::{ArgAction, Args, ValueEnum};
+use staredrop_codec_grid::{
+    ColorGridConfig, ContrastPalette, decode_color_grid_frame, encode_color_grid_frame,
+};
 use staredrop_codec_qr::{decode_first_qr_text, encode_text_to_qr_luma};
 use staredrop_crypto::hash::sha256_hex;
 use tracing::info;
@@ -13,6 +18,21 @@ use tracing::info;
 use crate::transfer::{
     OutputSpec, ReceiverSession, SenderBuildOptions, SenderPlan, build_file_sender_plan,
 };
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum VisualCodecArg {
+    Qr,
+    ColorGrid,
+}
+
+impl VisualCodecArg {
+    fn as_str(self) -> &'static str {
+        match self {
+            VisualCodecArg::Qr => "qr",
+            VisualCodecArg::ColorGrid => "color-grid",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Args)]
 pub struct SimulateArgs {
@@ -66,9 +86,56 @@ pub struct SimulateArgs {
     #[arg(
         long,
         default_value_t = 0,
-        help = "Corrupt every Nth DATA frame text before QR encode (0 disables)"
+        help = "Corrupt every Nth DATA frame text before visual encode (0 disables)"
     )]
     pub corrupt_every: u32,
+
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = VisualCodecArg::Qr,
+        help = "Visual codec used in simulation"
+    )]
+    pub visual_codec: VisualCodecArg,
+
+    #[arg(
+        long,
+        default_value_t = 96,
+        help = "Color-grid size (cells per side), only used with --visual-codec color-grid"
+    )]
+    pub grid_side: u16,
+
+    #[arg(
+        long,
+        default_value_t = 8,
+        help = "Color-grid cell pixel size, only used with --visual-codec color-grid"
+    )]
+    pub cell_pixels: u16,
+
+    #[arg(
+        long,
+        default_value_t = 2,
+        help = "Color-grid quiet-zone in cells, only used with --visual-codec color-grid"
+    )]
+    pub quiet_zone_cells: u16,
+
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        default_value_t = true,
+        help = "Append each simulation case to benchmark history CSV"
+    )]
+    pub record_history: bool,
+
+    #[arg(
+        long,
+        default_value = "docs/research/benchmark-history.csv",
+        help = "History CSV path appended when --record-history is true"
+    )]
+    pub history_file: PathBuf,
+
+    #[arg(long, help = "Optional label stored in benchmark history rows")]
+    pub run_label: Option<String>,
 }
 
 #[derive(Debug)]
@@ -86,6 +153,7 @@ struct CaseMetrics {
     total_chunks: u32,
     processed_size: u64,
     compression_ratio: f64,
+    visual_codec: VisualCodecArg,
     frames_in_plan: usize,
     loops: u32,
     frames_generated: usize,
@@ -103,35 +171,21 @@ struct CaseMetrics {
     completion_elapsed: Option<Duration>,
     modeled_display_elapsed: Duration,
     effective_kib_per_s: f64,
+    modeled_link_kib_per_s: f64,
     protocol_overhead_ratio: f64,
 }
 
 pub fn run_simulation_suite(args: SimulateArgs) -> Result<()> {
-    if args.chunk_size == 0 {
-        bail!("--chunk-size must be > 0");
-    }
-    if args.loops == 0 {
-        bail!("--loops must be > 0");
-    }
+    validate_args(&args)?;
 
     fs::create_dir_all(&args.output_dir)
         .with_context(|| format!("failed creating {}", args.output_dir.display()))?;
-
     let cases = resolve_cases(&args)?;
     if cases.is_empty() {
         bail!("no simulation cases found");
     }
 
-    println!("StareDrop simulation");
-    println!("  output-dir: {}", args.output_dir.display());
-    println!("  chunk-size: {}", args.chunk_size);
-    println!("  loops: {}", args.loops);
-    println!("  fps(model): {:.2}", args.fps.max(0.5));
-    println!("  reverse-data-order: {}", args.reverse_data_order);
-    println!("  drop-every: {}", args.drop_every);
-    println!("  corrupt-every: {}", args.corrupt_every);
-    println!("  cases: {}", cases.len());
-    println!();
+    print_run_header(&args, cases.len());
 
     let mut results = Vec::with_capacity(cases.len());
     for case_path in cases {
@@ -141,8 +195,55 @@ pub fn run_simulation_suite(args: SimulateArgs) -> Result<()> {
     }
 
     write_summary_files(&args.output_dir, &results)?;
+    if args.record_history {
+        append_history_csv(&args, &results)?;
+    }
     print_aggregate_summary(&results);
     Ok(())
+}
+
+fn validate_args(args: &SimulateArgs) -> Result<()> {
+    if args.chunk_size == 0 {
+        bail!("--chunk-size must be > 0");
+    }
+    if args.loops == 0 {
+        bail!("--loops must be > 0");
+    }
+    if args.fps <= 0.0 {
+        bail!("--fps must be > 0");
+    }
+    if matches!(args.visual_codec, VisualCodecArg::ColorGrid) {
+        if args.grid_side < 16 {
+            bail!("--grid-side must be >= 16 for color-grid");
+        }
+        if args.cell_pixels == 0 {
+            bail!("--cell-pixels must be > 0");
+        }
+    }
+    Ok(())
+}
+
+fn print_run_header(args: &SimulateArgs, case_count: usize) {
+    println!("StareDrop simulation");
+    println!("  output-dir: {}", args.output_dir.display());
+    println!("  visual-codec: {}", args.visual_codec.as_str());
+    println!("  chunk-size: {}", args.chunk_size);
+    println!("  loops: {}", args.loops);
+    println!("  fps(model): {:.2}", args.fps.max(0.5));
+    println!("  reverse-data-order: {}", args.reverse_data_order);
+    println!("  drop-every: {}", args.drop_every);
+    println!("  corrupt-every: {}", args.corrupt_every);
+    if matches!(args.visual_codec, VisualCodecArg::ColorGrid) {
+        println!(
+            "  color-grid: side={}, cell-px={}, quiet-zone={}",
+            args.grid_side, args.cell_pixels, args.quiet_zone_cells
+        );
+    }
+    println!("  cases: {}", case_count);
+    if args.record_history {
+        println!("  history-file: {}", args.history_file.display());
+    }
+    println!();
 }
 
 fn run_case(case_path: &Path, args: &SimulateArgs) -> Result<CaseMetrics> {
@@ -172,6 +273,7 @@ fn run_case(case_path: &Path, args: &SimulateArgs) -> Result<CaseMetrics> {
     let mut rx = ReceiverSession::new();
 
     let transmission = build_transmission_order(&frames, args.reverse_data_order);
+    let color_cfg = color_grid_cfg(args);
 
     let start = Instant::now();
     let mut encode_elapsed = Duration::ZERO;
@@ -206,21 +308,52 @@ fn run_case(case_path: &Path, args: &SimulateArgs) -> Result<CaseMetrics> {
             } else {
                 frame_text.clone()
             };
-
             total_frame_text_bytes += effective_text.len();
 
             let enc_start = Instant::now();
-            let qr = encode_text_to_qr_luma(&effective_text)
-                .with_context(|| format!("failed encoding frame for case {}", case_name))?;
-            encode_elapsed += enc_start.elapsed();
-            frames_encoded += 1;
+            let decoded_text = match args.visual_codec {
+                VisualCodecArg::Qr => {
+                    let qr = encode_text_to_qr_luma(&effective_text).with_context(|| {
+                        format!("failed encoding QR frame for case {}", case_name)
+                    })?;
+                    encode_elapsed += enc_start.elapsed();
+                    frames_encoded += 1;
 
-            let dec_start = Instant::now();
-            let decoded = decode_first_qr_text(&qr)
-                .with_context(|| format!("failed decoding frame for case {}", case_name))?;
-            decode_elapsed += dec_start.elapsed();
+                    let dec_start = Instant::now();
+                    let decoded = decode_first_qr_text(&qr).with_context(|| {
+                        format!("failed decoding QR frame for case {}", case_name)
+                    })?;
+                    decode_elapsed += dec_start.elapsed();
+                    decoded
+                }
+                VisualCodecArg::ColorGrid => {
+                    let encoded = encode_color_grid_frame(
+                        effective_text.as_bytes(),
+                        color_cfg.expect("color config set"),
+                    )
+                    .with_context(|| {
+                        format!("failed encoding color-grid frame for case {}", case_name)
+                    })?;
+                    encode_elapsed += enc_start.elapsed();
+                    frames_encoded += 1;
 
-            let Some(decoded_text) = decoded else {
+                    let dec_start = Instant::now();
+                    let bytes = decode_color_grid_frame(
+                        &encoded.image,
+                        color_cfg.expect("color config set"),
+                    )
+                    .with_context(|| {
+                        format!("failed decoding color-grid frame for case {}", case_name)
+                    })?;
+                    decode_elapsed += dec_start.elapsed();
+                    Some(
+                        String::from_utf8(bytes)
+                            .context("decoded color-grid frame is not utf-8 text")?,
+                    )
+                }
+            };
+
+            let Some(decoded_text) = decoded_text else {
                 decode_failures += 1;
                 continue;
             };
@@ -282,9 +415,15 @@ fn run_case(case_path: &Path, args: &SimulateArgs) -> Result<CaseMetrics> {
     } else {
         total_frame_text_bytes as f64 / input_bytes.len() as f64
     };
+    let modeled_link_kib_per_s = if modeled_display_elapsed.is_zero() {
+        0.0
+    } else {
+        (bytes_out as f64 / 1024.0) / modeled_display_elapsed.as_secs_f64()
+    };
 
     info!(
         case = %case_name,
+        codec = %args.visual_codec.as_str(),
         completed,
         frames_generated,
         frames_decoded,
@@ -309,6 +448,7 @@ fn run_case(case_path: &Path, args: &SimulateArgs) -> Result<CaseMetrics> {
         } else {
             manifest.processed_file_size as f64 / manifest.original_file_size as f64
         },
+        visual_codec: args.visual_codec,
         frames_in_plan: frames.len(),
         loops: args.loops,
         frames_generated,
@@ -326,7 +466,20 @@ fn run_case(case_path: &Path, args: &SimulateArgs) -> Result<CaseMetrics> {
         completion_elapsed,
         modeled_display_elapsed,
         effective_kib_per_s,
+        modeled_link_kib_per_s,
         protocol_overhead_ratio,
+    })
+}
+
+fn color_grid_cfg(args: &SimulateArgs) -> Option<ColorGridConfig> {
+    if !matches!(args.visual_codec, VisualCodecArg::ColorGrid) {
+        return None;
+    }
+    Some(ColorGridConfig {
+        grid_side: args.grid_side,
+        cell_pixels: args.cell_pixels,
+        quiet_zone_cells: args.quiet_zone_cells,
+        palette: ContrastPalette::BwRg,
     })
 }
 
@@ -390,7 +543,7 @@ fn generate_pattern_bytes(size: usize) -> Vec<u8> {
 fn generate_text_case() -> Vec<u8> {
     let mut s = String::new();
     for idx in 0..600 {
-        s.push_str("StareDrop Phase2 simulation line ");
+        s.push_str("StareDrop simulation line ");
         s.push_str(&idx.to_string());
         s.push('\n');
     }
@@ -427,7 +580,12 @@ fn print_case_summary(m: &CaseMetrics) {
         .map(|d| format!("{:.2}", d.as_secs_f64() * 1000.0))
         .unwrap_or_else(|| "n/a".to_string());
     println!("Case: {}", m.case_name);
-    println!("  input: {} bytes ({})", m.bytes_in, m.input_path.display());
+    println!(
+        "  codec: {}, input: {} bytes ({})",
+        m.visual_codec.as_str(),
+        m.bytes_in,
+        m.input_path.display()
+    );
     println!(
         "  output: {}",
         m.output_path
@@ -469,8 +627,12 @@ fn print_case_summary(m: &CaseMetrics) {
         m.modeled_display_elapsed.as_secs_f64() * 1000.0
     );
     println!(
-        "  rates: throughput={:.2} KiB/s, compression-ratio={:.4} (processed {} B), protocol-overhead={:.2}x",
-        m.effective_kib_per_s, m.compression_ratio, m.processed_size, m.protocol_overhead_ratio
+        "  rates: host-throughput={:.2} KiB/s, modeled-link={:.2} KiB/s, compression-ratio={:.4} (processed {} B), protocol-overhead={:.2}x",
+        m.effective_kib_per_s,
+        m.modeled_link_kib_per_s,
+        m.compression_ratio,
+        m.processed_size,
+        m.protocol_overhead_ratio
     );
     println!();
 }
@@ -478,7 +640,7 @@ fn print_case_summary(m: &CaseMetrics) {
 fn write_summary_files(output_dir: &Path, results: &[CaseMetrics]) -> Result<()> {
     let csv_path = output_dir.join("simulation-summary.csv");
     let mut csv = String::from(
-        "case_name,bytes_in,bytes_out,processed_size,chunk_size,total_chunks,frames_plan,loops,frames_generated,frames_dropped,frames_encoded,frames_decoded,decode_failures,accepted_chunks,duplicate_chunks,invalid_chunks,completed,sha_match,byte_diff,total_ms,completion_ms,encode_ms,decode_ms,modeled_display_ms,throughput_kib_s,compression_ratio,protocol_overhead_ratio,input_sha256,output_sha256,input_path,output_path\n",
+        "case_name,visual_codec,bytes_in,bytes_out,processed_size,chunk_size,total_chunks,frames_plan,loops,frames_generated,frames_dropped,frames_encoded,frames_decoded,decode_failures,accepted_chunks,duplicate_chunks,invalid_chunks,completed,sha_match,byte_diff,total_ms,completion_ms,encode_ms,decode_ms,modeled_display_ms,throughput_kib_s,modeled_link_kib_s,compression_ratio,protocol_overhead_ratio,input_sha256,output_sha256,input_path,output_path\n",
     );
     for m in results {
         let completion_ms = m
@@ -486,8 +648,9 @@ fn write_summary_files(output_dir: &Path, results: &[CaseMetrics]) -> Result<()>
             .map(|d| format!("{:.3}", d.as_secs_f64() * 1000.0))
             .unwrap_or_default();
         csv.push_str(&format!(
-            "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{:.3},{:.3},{:.3},{:.4},{:.6},{:.6},{},{},{},{}\n",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{:.3},{},{:.3},{:.3},{:.3},{:.4},{:.4},{:.6},{:.6},{},{},{},{}\n",
             escape_csv(&m.case_name),
+            m.visual_codec.as_str(),
             m.bytes_in,
             m.bytes_out,
             m.processed_size,
@@ -512,6 +675,7 @@ fn write_summary_files(output_dir: &Path, results: &[CaseMetrics]) -> Result<()>
             m.decode_elapsed.as_secs_f64() * 1000.0,
             m.modeled_display_elapsed.as_secs_f64() * 1000.0,
             m.effective_kib_per_s,
+            m.modeled_link_kib_per_s,
             m.compression_ratio,
             m.protocol_overhead_ratio,
             escape_csv(&m.input_sha256),
@@ -531,6 +695,7 @@ fn write_summary_files(output_dir: &Path, results: &[CaseMetrics]) -> Result<()>
     let mut text = String::new();
     for m in results {
         text.push_str(&format!("Case: {}\n", m.case_name));
+        text.push_str(&format!("  codec: {}\n", m.visual_codec.as_str()));
         text.push_str(&format!("  input: {} bytes\n", m.bytes_in));
         text.push_str(&format!("  output: {} bytes\n", m.bytes_out));
         text.push_str(&format!(
@@ -542,8 +707,8 @@ fn write_summary_files(output_dir: &Path, results: &[CaseMetrics]) -> Result<()>
                 .unwrap_or_else(|| "n/a".to_string())
         ));
         text.push_str(&format!(
-            "  throughput_kib_s={:.4}, overhead={:.4}x\n\n",
-            m.effective_kib_per_s, m.protocol_overhead_ratio
+            "  host_throughput_kib_s={:.4}, modeled_link_kib_s={:.4}, overhead={:.4}x\n\n",
+            m.effective_kib_per_s, m.modeled_link_kib_per_s, m.protocol_overhead_ratio
         ));
     }
     fs::write(&txt_path, text).with_context(|| format!("failed writing {}", txt_path.display()))?;
@@ -552,6 +717,128 @@ fn write_summary_files(output_dir: &Path, results: &[CaseMetrics]) -> Result<()>
     println!("Wrote {}", txt_path.display());
     println!();
     Ok(())
+}
+
+fn append_history_csv(args: &SimulateArgs, results: &[CaseMetrics]) -> Result<()> {
+    if let Some(parent) = args.history_file.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed creating {}", parent.display()))?;
+    }
+
+    let header = "timestamp_utc,run_label,git_commit,visual_codec,input_case,chunk_size,fps,loops,drop_every,corrupt_every,reverse_data_order,grid_side,cell_pixels,quiet_zone_cells,bytes_in,bytes_out,total_chunks,frames_plan,frames_generated,frames_dropped,frames_decoded,decode_failures,accepted_chunks,duplicate_chunks,invalid_chunks,completed,sha_match,byte_diff,completion_ms,total_ms,throughput_kib_s,modeled_link_kib_s,protocol_overhead_ratio,input_path,output_path,run_output_dir\n";
+
+    let exists = args.history_file.exists();
+    let mut history = if exists {
+        fs::read_to_string(&args.history_file)
+            .with_context(|| format!("failed reading {}", args.history_file.display()))?
+    } else {
+        String::new()
+    };
+
+    if exists {
+        let first = history.lines().next().unwrap_or_default();
+        if !first.contains("modeled_link_kib_s") {
+            let legacy = args.history_file.with_extension("legacy.csv");
+            fs::rename(&args.history_file, &legacy).with_context(|| {
+                format!(
+                    "failed migrating old history {} -> {}",
+                    args.history_file.display(),
+                    legacy.display()
+                )
+            })?;
+            println!(
+                "History schema upgraded; previous file moved to {}",
+                legacy.display()
+            );
+            history.clear();
+        }
+    }
+
+    if history.is_empty() {
+        history.push_str(header);
+    }
+
+    let ts = Utc::now().to_rfc3339();
+    let label = args.run_label.as_deref().unwrap_or("");
+    let commit = git_commit_short().unwrap_or_else(|| "unknown".to_string());
+
+    for m in results {
+        let completion_ms = m
+            .completion_elapsed
+            .map(|d| format!("{:.3}", d.as_secs_f64() * 1000.0))
+            .unwrap_or_default();
+        let row = vec![
+            escape_csv(&ts),
+            escape_csv(label),
+            escape_csv(&commit),
+            m.visual_codec.as_str().to_string(),
+            escape_csv(&m.case_name),
+            m.chunk_size.to_string(),
+            format!("{:.2}", args.fps),
+            args.loops.to_string(),
+            args.drop_every.to_string(),
+            args.corrupt_every.to_string(),
+            args.reverse_data_order.to_string(),
+            args.grid_side.to_string(),
+            args.cell_pixels.to_string(),
+            args.quiet_zone_cells.to_string(),
+            m.bytes_in.to_string(),
+            m.bytes_out.to_string(),
+            m.total_chunks.to_string(),
+            m.frames_in_plan.to_string(),
+            m.frames_generated.to_string(),
+            m.frames_dropped.to_string(),
+            m.frames_decoded.to_string(),
+            m.decode_failures.to_string(),
+            m.accepted_chunks.to_string(),
+            m.duplicate_chunks.to_string(),
+            m.invalid_chunks.to_string(),
+            m.completed.to_string(),
+            m.sha_match.to_string(),
+            m.byte_diff.map(|v| v.to_string()).unwrap_or_default(),
+            completion_ms,
+            format!("{:.3}", m.total_elapsed.as_secs_f64() * 1000.0),
+            format!("{:.4}", m.effective_kib_per_s),
+            format!("{:.4}", m.modeled_link_kib_per_s),
+            format!("{:.6}", m.protocol_overhead_ratio),
+            escape_csv(&m.input_path.display().to_string()),
+            escape_csv(
+                &m.output_path
+                    .as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default(),
+            ),
+            escape_csv(&args.output_dir.display().to_string()),
+        ];
+        history.push_str(&row.join(","));
+        history.push('\n');
+    }
+
+    fs::write(&args.history_file, history)
+        .with_context(|| format!("failed writing {}", args.history_file.display()))?;
+    println!(
+        "Appended benchmark history to {}",
+        args.history_file.display()
+    );
+    println!();
+    Ok(())
+}
+
+fn git_commit_short() -> Option<String> {
+    let out = Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(out.stdout).ok()?;
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }
 
 fn print_aggregate_summary(results: &[CaseMetrics]) {
@@ -580,8 +867,10 @@ fn escape_csv(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_transmission_order, byte_diff_count, corrupt_frame_text, generate_pattern_bytes,
+        VisualCodecArg, build_transmission_order, byte_diff_count, color_grid_cfg,
+        corrupt_frame_text, generate_pattern_bytes,
     };
+    use crate::simulate::SimulateArgs;
 
     #[test]
     fn pattern_size_matches() {
@@ -613,5 +902,31 @@ mod tests {
         assert_eq!(byte_diff_count(b"abc", b"abc"), 0);
         assert_eq!(byte_diff_count(b"abc", b"axc"), 1);
         assert_eq!(byte_diff_count(b"abc", b"axcd"), 2);
+    }
+
+    #[test]
+    fn color_cfg_only_for_color_codec() {
+        let base = SimulateArgs {
+            input_files: Vec::new(),
+            output_dir: "x".into(),
+            chunk_size: 700,
+            fps: 8.0,
+            loops: 1,
+            reverse_data_order: false,
+            drop_every: 0,
+            corrupt_every: 0,
+            visual_codec: VisualCodecArg::Qr,
+            grid_side: 96,
+            cell_pixels: 8,
+            quiet_zone_cells: 2,
+            record_history: true,
+            history_file: "h.csv".into(),
+            run_label: None,
+        };
+        assert!(color_grid_cfg(&base).is_none());
+
+        let mut color = base;
+        color.visual_codec = VisualCodecArg::ColorGrid;
+        assert!(color_grid_cfg(&color).is_some());
     }
 }

@@ -21,6 +21,7 @@ winit.workspace = true
 staredrop-chunking = { path = "../staredrop-chunking" }
 staredrop-camera = { path = "../staredrop-camera" }
 staredrop-codec-qr = { path = "../staredrop-codec-qr" }
+staredrop-codec-grid = { path = "../staredrop-codec-grid" }
 staredrop-core = { path = "../staredrop-core" }
 staredrop-crypto = { path = "../staredrop-crypto" }
 staredrop-protocol = { path = "../staredrop-protocol" }

@@ -3000,6 +3000,7 @@ dependencies = [
  "rfd",
  "staredrop-camera",
  "staredrop-chunking",
+ "staredrop-codec-grid",
  "staredrop-codec-qr",
  "staredrop-core",
  "staredrop-crypto",
@@ -3049,6 +3050,7 @@ name = "staredrop-codec-grid"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "crc32fast",
  "image 0.25.10",
  "staredrop-core",
 ]
