@@ -29,15 +29,14 @@ cargo run -p staredrop-app -- [global-flags] <subcommand> [subcommand-flags]
 5. `--chunk-size <N>` for `--send-file` (optional).
 6. `--fps <N>` (default: `8`) for sender frame animation.
 7. `--visual-codec <qr|color-grid>` (default: `qr`)
-8. `--grid-side <N>` (default: `96`) for color-grid
-9. `--cell-pixels <N>` (default: `8`) for color-grid
-10. `--quiet-zone-cells <N>` (default: `2`) for color-grid
+8. `--pixel-size <N>` (default: `8`) for color-grid
 
 Rules:
 
 1. Use exactly one of `--text`, `--input-file`, or `--send-file`.
 2. If using `--input-file` with binary content, use `--input-format base64`.
-3. In `--visual-codec color-grid` mode, omitting `--chunk-size` auto-selects near-max payload utilization for the chosen grid settings.
+3. In `--visual-codec color-grid` mode, StareDrop derives grid side from fullscreen size and `--pixel-size`.
+4. In `--visual-codec color-grid` mode, omitting `--chunk-size` auto-selects near-max payload utilization for the computed grid settings.
 
 Examples:
 
@@ -46,7 +45,7 @@ cargo run -p staredrop-app -- sender --text "hello world"
 cargo run -p staredrop-app -- sender --input-file ./payload.txt --input-format utf8
 cargo run -p staredrop-app -- sender --input-file ./sample.bin --input-format base64
 cargo run -p staredrop-app -- sender --send-file ./payload.bin --chunk-size 700 --fps 8
-cargo run -p staredrop-app -- sender --send-file ./payload.bin --visual-codec color-grid --grid-side 128 --cell-pixels 8 --quiet-zone-cells 2 --fps 12
+cargo run -p staredrop-app -- sender --send-file ./payload.bin --visual-codec color-grid --pixel-size 8 --fps 12
 ```
 
 ## Receiver flags
@@ -58,9 +57,7 @@ cargo run -p staredrop-app -- sender --send-file ./payload.bin --visual-codec co
 5. `--output-dir <PATH>` (default: `.`): output directory when output-file is not set
 6. `--auto-save <true|false>` (default: `true`)
 7. `--visual-codec <qr|color-grid>` (default: `qr`)
-8. `--grid-side <N>` (default: `96`) for color-grid
-9. `--cell-pixels <N>` (default: `8`) for color-grid
-10. `--quiet-zone-cells <N>` (default: `2`) for color-grid
+8. `--pixel-size <N>` (default: `8`) for color-grid
 
 Examples:
 
@@ -69,7 +66,7 @@ cargo run -p staredrop-app -- list-cameras
 cargo run -p staredrop-app -- receiver --camera-index 0
 cargo run -p staredrop-app -- receiver --camera-index 1 --auto-start --output-dir ./received
 cargo run -p staredrop-app -- receiver --camera-index 1 --output-file ./received/output.bin
-cargo run -p staredrop-app -- receiver --camera-index 1 --auto-start --visual-codec color-grid --grid-side 128 --cell-pixels 8 --quiet-zone-cells 2 --output-dir ./received
+cargo run -p staredrop-app -- receiver --camera-index 1 --auto-start --visual-codec color-grid --pixel-size 8 --output-dir ./received
 ```
 
 ## Receiver keyboard controls

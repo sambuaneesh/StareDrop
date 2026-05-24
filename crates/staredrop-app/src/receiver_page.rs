@@ -32,6 +32,7 @@ pub struct ReceiverPageState {
     decode_hits: u64,
     printed_last: String,
     transfer: ReceiverSession,
+    last_color_grid_side: Option<u16>,
 }
 
 impl ReceiverPageState {
@@ -55,6 +56,7 @@ impl ReceiverPageState {
             decode_hits: 0,
             printed_last: String::new(),
             transfer: ReceiverSession::new(),
+            last_color_grid_side: None,
         };
         state.refresh_devices();
         if state.config.auto_start {
@@ -270,14 +272,68 @@ impl ReceiverPageState {
         }
     }
 
-    fn decode_visual_frame(&self, frame: &staredrop_camera::CapturedFrame) -> Option<String> {
+    fn decode_visual_frame(&mut self, frame: &staredrop_camera::CapturedFrame) -> Option<String> {
         match self.config.visual_codec {
             VisualCodecConfig::Qr => decode_first_qr_text(&frame.to_gray()).ok().flatten(),
             VisualCodecConfig::ColorGrid(grid) => {
-                let bytes =
-                    decode_color_grid_frame_resampled(&frame.rgb, grid.as_codec_config()).ok()?;
-                String::from_utf8(bytes).ok()
+                for side in self.color_grid_candidates(grid, frame) {
+                    let cfg = grid.config_for_grid_side(side);
+                    if let Ok(bytes) = decode_color_grid_frame_resampled(&frame.rgb, cfg)
+                        && let Ok(text) = String::from_utf8(bytes)
+                    {
+                        self.last_color_grid_side = Some(side);
+                        return Some(text);
+                    }
+                }
+                None
             }
         }
+    }
+
+    fn color_grid_candidates(
+        &self,
+        grid: crate::visual_codec::ColorGridParams,
+        frame: &staredrop_camera::CapturedFrame,
+    ) -> Vec<u16> {
+        let mut sides = Vec::new();
+        let mut push_unique = |v: u16| {
+            if (crate::visual_codec::ColorGridParams::MIN_GRID_SIDE
+                ..=crate::visual_codec::ColorGridParams::MAX_GRID_SIDE)
+                .contains(&v)
+                && !sides.contains(&v)
+            {
+                sides.push(v);
+            }
+        };
+
+        if let Some(last) = self.last_color_grid_side {
+            push_unique(last);
+        }
+
+        let min_side = frame.width().min(frame.height()) as f32;
+        let estimate = grid.grid_side_for_square_points(min_side * 0.92);
+        push_unique(estimate);
+        for delta in [2_u16, 4, 6, 8, 12, 16, 24, 32, 48, 64] {
+            push_unique(estimate.saturating_sub(delta));
+            push_unique(estimate.saturating_add(delta));
+        }
+
+        let mut s = crate::visual_codec::ColorGridParams::MIN_GRID_SIDE;
+        while s <= crate::visual_codec::ColorGridParams::MAX_GRID_SIDE {
+            push_unique(s);
+            let step = if s < 160 {
+                4
+            } else if s < 320 {
+                8
+            } else {
+                16
+            };
+            match s.checked_add(step) {
+                Some(next) => s = next,
+                None => break,
+            }
+        }
+
+        sides
     }
 }

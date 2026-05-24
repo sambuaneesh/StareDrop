@@ -100,13 +100,11 @@ Sender mode (experimental live color-grid):
 cargo run -p staredrop-app -- sender \
   --send-file ./payload.bin \
   --visual-codec color-grid \
-  --grid-side 128 \
-  --cell-pixels 8 \
-  --quiet-zone-cells 2 \
+  --pixel-size 8 \
   --fps 12
 ```
 
-For color-grid, if `--chunk-size` is omitted, StareDrop now auto-selects a near-max chunk size for the chosen grid/cell settings.
+For color-grid, `--pixel-size` is the only geometry parameter. Grid side is auto-derived from the fullscreen render area. If `--chunk-size` is omitted, StareDrop auto-selects a near-max chunk size for the computed grid capacity.
 
 Receiver mode:
 
@@ -127,9 +125,7 @@ cargo run -p staredrop-app -- receiver \
   --camera-index 0 \
   --auto-start \
   --visual-codec color-grid \
-  --grid-side 128 \
-  --cell-pixels 8 \
-  --quiet-zone-cells 2 \
+  --pixel-size 8 \
   --output-dir ./received
 ```
 
@@ -187,7 +183,7 @@ cargo test --workspace
 5. Point receiver camera at sender fullscreen QR animation.
 6. Receiver reconstructs chunks and saves when complete.
 
-For color-grid mode, use matching `--grid-side`, `--cell-pixels`, and `--quiet-zone-cells` on both sender and receiver.
+For color-grid mode, use matching `--pixel-size` on sender and receiver.
 
 ## Known limitations (Phase 2)
 
