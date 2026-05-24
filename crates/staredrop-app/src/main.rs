@@ -101,8 +101,56 @@ fn run_app(
         }
     }
 
+    let mut attempts: Vec<eframe::Renderer> = Vec::new();
+    if let Ok(forced) = std::env::var("STAREDROP_RENDERER") {
+        match forced.to_lowercase().as_str() {
+            "wgpu" => attempts.push(eframe::Renderer::Wgpu),
+            "glow" => attempts.push(eframe::Renderer::Glow),
+            _ => {
+                eprintln!(
+                    "StareDrop: unknown STAREDROP_RENDERER='{}', using auto fallback order.",
+                    forced
+                );
+            }
+        }
+    }
+    if attempts.is_empty() {
+        attempts.push(eframe::Renderer::Wgpu);
+        attempts.push(eframe::Renderer::Glow);
+    }
+
+    let mut last_err: Option<eframe::Error> = None;
+    for renderer in attempts {
+        match run_app_with_renderer(
+            force_x11,
+            launch_mode.clone(),
+            fullscreen,
+            show_overlay,
+            renderer,
+        ) {
+            Ok(()) => return Ok(()),
+            Err(err) => {
+                eprintln!(
+                    "StareDrop: renderer {:?} startup failed: {}. Trying next fallback...",
+                    renderer, err
+                );
+                last_err = Some(err);
+            }
+        }
+    }
+
+    Err(last_err.expect("at least one renderer attempt"))
+}
+
+fn run_app_with_renderer(
+    force_x11: bool,
+    launch_mode: LaunchMode,
+    fullscreen: bool,
+    show_overlay: bool,
+    renderer: eframe::Renderer,
+) -> Result<(), eframe::Error> {
     let mut native_options = eframe::NativeOptions::default();
-    native_options.renderer = eframe::Renderer::Wgpu;
+    native_options.renderer = renderer;
     native_options.viewport = eframe::egui::ViewportBuilder::default()
         .with_title("StareDrop")
         .with_fullscreen(fullscreen)
@@ -147,6 +195,9 @@ fn print_linux_runtime_hints(error_message: &str) {
             "Hint: Force X11 fallback with: STAREDROP_FORCE_X11=1 cargo run -p staredrop-app -- <args>"
         );
     }
+    eprintln!(
+        "Hint: Force renderer backend if needed: STAREDROP_RENDERER=glow cargo run -p staredrop-app -- <args>"
+    );
     if !x11_runtime_available() {
         eprintln!(
             "Hint: Missing X11 keyboard runtime. On Arch install: sudo pacman -S --needed libxkbcommon-x11"
