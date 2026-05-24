@@ -1,6 +1,6 @@
 # StareDrop Terminal Usage (Phase 2)
 
-StareDrop is CLI-driven. The terminal selects mode and options; the desktop window is used for fullscreen QR display or camera scanning.
+StareDrop is CLI-driven. The terminal selects mode and options; the desktop window is used for fullscreen visual frame display or camera scanning.
 
 ## Command shape
 
@@ -28,6 +28,10 @@ cargo run -p staredrop-app -- [global-flags] <subcommand> [subcommand-flags]
 4. `--input-format <utf8|base64>` (default: `utf8`) for `--input-file`.
 5. `--chunk-size <N>` (default: `700`) for `--send-file`.
 6. `--fps <N>` (default: `8`) for sender frame animation.
+7. `--visual-codec <qr|color-grid>` (default: `qr`)
+8. `--grid-side <N>` (default: `96`) for color-grid
+9. `--cell-pixels <N>` (default: `8`) for color-grid
+10. `--quiet-zone-cells <N>` (default: `2`) for color-grid
 
 Rules:
 
@@ -41,6 +45,7 @@ cargo run -p staredrop-app -- sender --text "hello world"
 cargo run -p staredrop-app -- sender --input-file ./payload.txt --input-format utf8
 cargo run -p staredrop-app -- sender --input-file ./sample.bin --input-format base64
 cargo run -p staredrop-app -- sender --send-file ./payload.bin --chunk-size 700 --fps 8
+cargo run -p staredrop-app -- sender --send-file ./payload.bin --visual-codec color-grid --grid-side 128 --cell-pixels 8 --quiet-zone-cells 2 --chunk-size 1800 --fps 12
 ```
 
 ## Receiver flags
@@ -51,6 +56,10 @@ cargo run -p staredrop-app -- sender --send-file ./payload.bin --chunk-size 700 
 4. `--output-file <PATH>`: exact output path (must not exist)
 5. `--output-dir <PATH>` (default: `.`): output directory when output-file is not set
 6. `--auto-save <true|false>` (default: `true`)
+7. `--visual-codec <qr|color-grid>` (default: `qr`)
+8. `--grid-side <N>` (default: `96`) for color-grid
+9. `--cell-pixels <N>` (default: `8`) for color-grid
+10. `--quiet-zone-cells <N>` (default: `2`) for color-grid
 
 Examples:
 
@@ -59,6 +68,7 @@ cargo run -p staredrop-app -- list-cameras
 cargo run -p staredrop-app -- receiver --camera-index 0
 cargo run -p staredrop-app -- receiver --camera-index 1 --auto-start --output-dir ./received
 cargo run -p staredrop-app -- receiver --camera-index 1 --output-file ./received/output.bin
+cargo run -p staredrop-app -- receiver --camera-index 1 --auto-start --visual-codec color-grid --grid-side 128 --cell-pixels 8 --quiet-zone-cells 2 --output-dir ./received
 ```
 
 ## Receiver keyboard controls

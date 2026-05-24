@@ -61,6 +61,40 @@ pub fn decode_color_grid_frame(image: &RgbImage, cfg: ColorGridConfig) -> Result
     Ok(payload.to_vec())
 }
 
+pub fn decode_color_grid_frame_resampled(
+    image: &RgbImage,
+    cfg: ColorGridConfig,
+) -> Result<Vec<u8>> {
+    let size_cells = cfg.grid_side + cfg.quiet_zone_cells * 2;
+    let expected_px = size_cells as u32 * cfg.cell_pixels as u32;
+    if expected_px == 0 {
+        bail!("invalid expected pixel size");
+    }
+
+    let min_side = image.width().min(image.height());
+    if min_side < 16 {
+        bail!(
+            "camera frame too small for color-grid decode: {}x{}",
+            image.width(),
+            image.height()
+        );
+    }
+    let x0 = (image.width() - min_side) / 2;
+    let y0 = (image.height() - min_side) / 2;
+    let square = image::imageops::crop_imm(image, x0, y0, min_side, min_side).to_image();
+    let normalized = if min_side == expected_px {
+        square
+    } else {
+        image::imageops::resize(
+            &square,
+            expected_px,
+            expected_px,
+            image::imageops::FilterType::Nearest,
+        )
+    };
+    decode_color_grid_frame(&normalized, cfg)
+}
+
 fn nearest_symbol(px: Rgb<u8>, palette: ContrastPalette) -> u8 {
     let mut best_symbol = 0u8;
     let mut best_dist = u32::MAX;
@@ -95,7 +129,7 @@ fn symbols_2bit_to_bytes(symbols: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        decoder::decode_color_grid_frame,
+        decoder::{decode_color_grid_frame, decode_color_grid_frame_resampled},
         encoder::{ColorGridConfig, encode_color_grid_frame},
     };
 
@@ -104,6 +138,20 @@ mod tests {
         let cfg = ColorGridConfig::default();
         let encoded = encode_color_grid_frame(b"staredrop-color-grid", cfg).expect("encode");
         let decoded = decode_color_grid_frame(&encoded.image, cfg).expect("decode");
+        assert_eq!(decoded, b"staredrop-color-grid");
+    }
+
+    #[test]
+    fn round_trip_resampled() {
+        let cfg = ColorGridConfig::default();
+        let encoded = encode_color_grid_frame(b"staredrop-color-grid", cfg).expect("encode");
+        let larger = image::imageops::resize(
+            &encoded.image,
+            encoded.image.width() * 2,
+            encoded.image.height() * 2,
+            image::imageops::FilterType::Nearest,
+        );
+        let decoded = decode_color_grid_frame_resampled(&larger, cfg).expect("decode");
         assert_eq!(decoded, b"staredrop-color-grid");
     }
 }

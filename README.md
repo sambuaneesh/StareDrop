@@ -39,6 +39,7 @@ Implemented:
 - Phase 2 animated QR file transfer (manifest + data frames)
 - Camera-free simulation mode for automated sender->QR->decode->receiver benchmarking
 - Experimental color-grid visual codec path in simulation (`--visual-codec color-grid`)
+- Experimental color-grid visual codec path in live sender/receiver (`--visual-codec color-grid`)
 - Chunking/reassembly + CRC validation
 - End-to-end SHA-256 verification and output save path controls
 - Core protocol/session/chunking utilities and tests
@@ -93,6 +94,19 @@ Sender mode (Phase 2 file transfer via animated QR):
 cargo run -p staredrop-app -- sender --send-file ./payload.bin --chunk-size 700 --fps 8
 ```
 
+Sender mode (experimental live color-grid):
+
+```bash
+cargo run -p staredrop-app -- sender \
+  --send-file ./payload.bin \
+  --visual-codec color-grid \
+  --grid-side 128 \
+  --cell-pixels 8 \
+  --quiet-zone-cells 2 \
+  --chunk-size 1800 \
+  --fps 12
+```
+
 Receiver mode:
 
 ```bash
@@ -103,6 +117,19 @@ Receiver mode with explicit output file (fails if file already exists):
 
 ```bash
 cargo run -p staredrop-app -- receiver --camera-index 0 --output-file ./received/out.bin
+```
+
+Receiver mode (experimental live color-grid):
+
+```bash
+cargo run -p staredrop-app -- receiver \
+  --camera-index 0 \
+  --auto-start \
+  --visual-codec color-grid \
+  --grid-side 128 \
+  --cell-pixels 8 \
+  --quiet-zone-cells 2 \
+  --output-dir ./received
 ```
 
 Window options:
@@ -158,6 +185,8 @@ cargo test --workspace
    - `Q` or `Esc`: quit
 5. Point receiver camera at sender fullscreen QR animation.
 6. Receiver reconstructs chunks and saves when complete.
+
+For color-grid mode, use matching `--grid-side`, `--cell-pixels`, and `--quiet-zone-cells` on both sender and receiver.
 
 ## Known limitations (Phase 2)
 

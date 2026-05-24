@@ -4,6 +4,7 @@ mod receiver_page;
 mod sender_page;
 mod simulate;
 mod transfer;
+mod visual_codec;
 
 use app::{LaunchMode, StareDropApp};
 use clap::Parser;

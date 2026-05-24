@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use anyhow::{Context, Result, bail};
-use clap::{ArgAction, Parser, Subcommand, ValueEnum};
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use staredrop_camera::list_cameras;
 
 use crate::app::LaunchMode;
@@ -9,6 +9,7 @@ use crate::receiver_page::ReceiverConfig;
 use crate::sender_page::SenderConfig;
 use crate::simulate::{SimulateArgs, run_simulation_suite};
 use crate::transfer::{SenderBuildOptions, build_file_sender_plan, build_text_sender_plan};
+use crate::visual_codec::{ColorGridParams, VisualCodecConfig};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -40,12 +41,12 @@ pub struct Cli {
 pub enum Command {
     #[command(about = "Display sender frames (text or file transfer)")]
     Sender(SenderArgs),
-    #[command(about = "Open camera and scan QR frames")]
+    #[command(about = "Open camera and scan visual frames")]
     Receiver(ReceiverArgs),
     #[command(about = "List available camera devices and exit")]
     ListCameras,
     #[command(
-        about = "Run camera-free end-to-end sender->QR->decoder->receiver simulation and benchmark"
+        about = "Run camera-free end-to-end sender->visual->decoder->receiver simulation and benchmark"
     )]
     Simulate(SimulateArgs),
 }
@@ -54,6 +55,36 @@ pub enum Command {
 pub enum InputFormat {
     Utf8,
     Base64,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum VisualCodecKind {
+    Qr,
+    ColorGrid,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct ColorGridCliArgs {
+    #[arg(
+        long,
+        default_value_t = 96,
+        help = "Color-grid side length in cells (for --visual-codec color-grid)"
+    )]
+    pub grid_side: u16,
+
+    #[arg(
+        long,
+        default_value_t = 8,
+        help = "Color-grid cell size in pixels (for --visual-codec color-grid)"
+    )]
+    pub cell_pixels: u16,
+
+    #[arg(
+        long,
+        default_value_t = 2,
+        help = "Color-grid quiet-zone in cells (for --visual-codec color-grid)"
+    )]
+    pub quiet_zone_cells: u16,
 }
 
 #[derive(Debug, clap::Args)]
@@ -80,6 +111,17 @@ pub struct SenderArgs {
 
     #[arg(long, default_value_t = 8.0, help = "Frame rate for sender animation")]
     pub fps: f32,
+
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = VisualCodecKind::Qr,
+        help = "Visual codec used to render sender frames"
+    )]
+    pub visual_codec: VisualCodecKind,
+
+    #[command(flatten)]
+    pub color_grid: ColorGridCliArgs,
 }
 
 #[derive(Debug, clap::Args)]
@@ -119,6 +161,17 @@ pub struct ReceiverArgs {
         help = "Automatically save once all chunks are received and verified"
     )]
     pub auto_save: bool,
+
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = VisualCodecKind::Qr,
+        help = "Visual codec decoder used by receiver"
+    )]
+    pub visual_codec: VisualCodecKind,
+
+    #[command(flatten)]
+    pub color_grid: ColorGridCliArgs,
 }
 
 pub fn list_cameras_cli() -> Result<()> {
@@ -144,6 +197,7 @@ pub fn resolve_launch_mode(command: Command) -> Result<LaunchMode> {
             output_file: args.output_file,
             output_dir: args.output_dir,
             auto_save: args.auto_save,
+            visual_codec: resolve_visual_codec(args.visual_codec, args.color_grid.clone())?,
         })),
         Command::ListCameras | Command::Simulate(_) => {
             bail!("list-cameras/simulate do not launch the GUI")
@@ -156,6 +210,8 @@ pub fn run_simulate_cli(args: SimulateArgs) -> Result<()> {
 }
 
 fn resolve_sender(args: SenderArgs) -> Result<SenderConfig> {
+    let visual_codec = resolve_visual_codec(args.visual_codec, args.color_grid.clone())?;
+
     let selected_count = usize::from(args.text.is_some())
         + usize::from(args.input_file.is_some())
         + usize::from(args.send_file.is_some());
@@ -192,5 +248,28 @@ fn resolve_sender(args: SenderArgs) -> Result<SenderConfig> {
     Ok(SenderConfig {
         plan,
         fps: args.fps.max(0.5),
+        visual_codec,
     })
+}
+
+fn resolve_visual_codec(
+    kind: VisualCodecKind,
+    grid: ColorGridCliArgs,
+) -> Result<VisualCodecConfig> {
+    match kind {
+        VisualCodecKind::Qr => Ok(VisualCodecConfig::Qr),
+        VisualCodecKind::ColorGrid => {
+            if grid.grid_side < 16 {
+                bail!("--grid-side must be >= 16 for color-grid");
+            }
+            if grid.cell_pixels == 0 {
+                bail!("--cell-pixels must be > 0 for color-grid");
+            }
+            Ok(VisualCodecConfig::ColorGrid(ColorGridParams {
+                grid_side: grid.grid_side,
+                cell_pixels: grid.cell_pixels,
+                quiet_zone_cells: grid.quiet_zone_cells,
+            }))
+        }
+    }
 }

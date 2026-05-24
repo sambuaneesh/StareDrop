@@ -2,9 +2,11 @@ use std::path::PathBuf;
 
 use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions};
 use staredrop_camera::{CameraCapture, CameraDeviceInfo, list_cameras};
+use staredrop_codec_grid::decode_color_grid_frame_resampled;
 use staredrop_codec_qr::decode_first_qr_text;
 
 use crate::transfer::{OutputSpec, ReceiverSession};
+use crate::visual_codec::VisualCodecConfig;
 
 #[derive(Debug, Clone)]
 pub struct ReceiverConfig {
@@ -14,6 +16,7 @@ pub struct ReceiverConfig {
     pub output_file: Option<PathBuf>,
     pub output_dir: PathBuf,
     pub auto_save: bool,
+    pub visual_codec: VisualCodecConfig,
 }
 
 pub struct ReceiverPageState {
@@ -102,6 +105,10 @@ impl ReceiverPageState {
                                     .strong(),
                             );
                             ui.label(format!("Camera index: {}", self.config.camera_index));
+                            ui.label(format!(
+                                "Visual codec: {}",
+                                self.config.visual_codec.as_str()
+                            ));
                             ui.label(format!("Frames captured: {}", self.frames_seen));
                             ui.label(format!("Frames decoded: {}", self.decode_hits));
                             let progress = self.transfer.progress();
@@ -230,9 +237,9 @@ impl ReceiverPageState {
                     ));
                 }
 
-                if let Ok(Some(text)) = decode_first_qr_text(&frame.to_gray()) {
+                if let Some(text) = self.decode_visual_frame(&frame) {
                     self.decode_hits += 1;
-                    self.status = "QR decoded.".to_string();
+                    self.status = "Frame decoded.".to_string();
                     self.decoded_text = text;
 
                     if self.config.print_decoded && self.decoded_text != self.printed_last {
@@ -259,6 +266,17 @@ impl ReceiverPageState {
             }
             Err(err) => {
                 self.status = format!("Camera frame error: {err}");
+            }
+        }
+    }
+
+    fn decode_visual_frame(&self, frame: &staredrop_camera::CapturedFrame) -> Option<String> {
+        match self.config.visual_codec {
+            VisualCodecConfig::Qr => decode_first_qr_text(&frame.to_gray()).ok().flatten(),
+            VisualCodecConfig::ColorGrid(grid) => {
+                let bytes =
+                    decode_color_grid_frame_resampled(&frame.rgb, grid.as_codec_config()).ok()?;
+                String::from_utf8(bytes).ok()
             }
         }
     }

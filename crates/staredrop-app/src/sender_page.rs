@@ -1,21 +1,25 @@
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions};
+use image::DynamicImage;
+use staredrop_codec_grid::encode_color_grid_frame;
 use staredrop_codec_qr::{encode_text_to_qr_luma, render_luma_to_rgba};
 
 use crate::transfer::SenderPlan;
+use crate::visual_codec::VisualCodecConfig;
 
 #[derive(Debug, Clone)]
 pub struct SenderConfig {
     pub plan: SenderPlan,
     pub fps: f32,
+    pub visual_codec: VisualCodecConfig,
 }
 
 pub struct SenderPageState {
     config: SenderConfig,
-    qr_texture: Option<TextureHandle>,
+    frame_texture: Option<TextureHandle>,
     status: String,
-    qr_pixels: [usize; 2],
+    frame_pixels: [usize; 2],
     current_frame_index: usize,
     loop_count: u64,
     last_switch_at: Instant,
@@ -25,9 +29,9 @@ impl SenderPageState {
     pub fn new(config: SenderConfig, cc: &eframe::CreationContext<'_>) -> Self {
         let mut state = Self {
             config,
-            qr_texture: None,
+            frame_texture: None,
             status: String::new(),
-            qr_pixels: [0, 0],
+            frame_pixels: [0, 0],
             current_frame_index: 0,
             loop_count: 0,
             last_switch_at: Instant::now(),
@@ -51,21 +55,59 @@ impl SenderPageState {
     }
 
     fn render_current_frame(&mut self, ctx: &egui::Context) {
-        match encode_text_to_qr_luma(self.current_frame_text()) {
-            Ok(luma) => {
-                let rgba = render_luma_to_rgba(&luma);
-                let image = ColorImage::from_rgba_unmultiplied(
-                    [luma.width() as usize, luma.height() as usize],
-                    &rgba,
-                );
-                self.qr_pixels = [luma.width() as usize, luma.height() as usize];
-                self.qr_texture =
-                    Some(ctx.load_texture("sender_qr_texture", image, TextureOptions::NEAREST));
-                self.status = "Displaying frame".to_string();
-            }
-            Err(err) => {
-                self.status = format!("Failed to encode QR frame: {err}");
-            }
+        match self.config.visual_codec {
+            VisualCodecConfig::Qr => match encode_text_to_qr_luma(self.current_frame_text()) {
+                Ok(luma) => {
+                    let rgba = render_luma_to_rgba(&luma);
+                    let image = ColorImage::from_rgba_unmultiplied(
+                        [luma.width() as usize, luma.height() as usize],
+                        &rgba,
+                    );
+                    self.frame_pixels = [luma.width() as usize, luma.height() as usize];
+                    self.frame_texture = Some(ctx.load_texture(
+                        "sender_frame_texture",
+                        image,
+                        TextureOptions::NEAREST,
+                    ));
+                    self.status = "Displaying QR frame".to_string();
+                }
+                Err(err) => {
+                    self.status = format!("Failed to encode QR frame: {err}");
+                }
+            },
+            VisualCodecConfig::ColorGrid(grid) => match encode_color_grid_frame(
+                self.current_frame_text().as_bytes(),
+                grid.as_codec_config(),
+            ) {
+                Ok(encoded) => {
+                    let rgba = DynamicImage::ImageRgb8(encoded.image.clone())
+                        .to_rgba8()
+                        .into_raw();
+                    let image = ColorImage::from_rgba_unmultiplied(
+                        [
+                            encoded.image.width() as usize,
+                            encoded.image.height() as usize,
+                        ],
+                        &rgba,
+                    );
+                    self.frame_pixels = [
+                        encoded.image.width() as usize,
+                        encoded.image.height() as usize,
+                    ];
+                    self.frame_texture = Some(ctx.load_texture(
+                        "sender_frame_texture",
+                        image,
+                        TextureOptions::NEAREST,
+                    ));
+                    self.status = format!(
+                        "Displaying color-grid frame (payload {} B)",
+                        encoded.payload_bytes
+                    );
+                }
+                Err(err) => {
+                    self.status = format!("Failed to encode color-grid frame: {err}");
+                }
+            },
         }
     }
 
@@ -97,15 +139,15 @@ impl SenderPageState {
         let rect = ui.max_rect();
         ui.painter().rect_filled(rect, 0.0, egui::Color32::BLACK);
 
-        if let Some(texture) = &self.qr_texture {
+        if let Some(texture) = &self.frame_texture {
             let full = ui.available_size();
             let max_side = full.x.min(full.y) * 0.92;
             let size = egui::vec2(max_side, max_side);
             let offset = egui::vec2((full.x - size.x) * 0.5, (full.y - size.y) * 0.5);
-            let qr_rect = egui::Rect::from_min_size(rect.min + offset, size);
+            let frame_rect = egui::Rect::from_min_size(rect.min + offset, size);
             ui.painter().image(
                 texture.id(),
-                qr_rect,
+                frame_rect,
                 egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1.0, 1.0)),
                 egui::Color32::WHITE,
             );
@@ -142,10 +184,14 @@ impl SenderPageState {
                                     ui.label(format!("Chunk count: {}", manifest.total_chunks));
                                 }
                             }
+                            ui.label(format!(
+                                "Visual codec: {}",
+                                self.config.visual_codec.as_str()
+                            ));
                             ui.label(format!("FPS: {:.2}", self.config.fps));
                             ui.label(format!(
-                                "QR pixels: {} x {}",
-                                self.qr_pixels[0], self.qr_pixels[1]
+                                "Frame pixels: {} x {}",
+                                self.frame_pixels[0], self.frame_pixels[1]
                             ));
                             ui.label(format!("Status: {}", self.status));
                             ui.separator();
